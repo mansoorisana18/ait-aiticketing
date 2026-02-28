@@ -6,9 +6,9 @@ import { useAuth } from "../state/AuthContext";
 import type { UserRole } from "../api/types";
 
 export default function RoleRoute({ allowedRoles }: { allowedRoles: UserRole[] }) {
-  const { auth, isAuthReady } = useAuth();
+  const { auth } = useAuth();
 
-  if (!isAuthReady) {
+  if (auth.isBootstrapping) {
     return (
       <Box sx={{ p: 3 }}>
         <LoadingSkeleton variant="list" count={4} />
@@ -16,7 +16,7 @@ export default function RoleRoute({ allowedRoles }: { allowedRoles: UserRole[] }
     );
   }
 
-  if (!auth.userId) return <Navigate to="/login" replace />;
-  if (!allowedRoles.includes(auth.role)) return <Navigate to="/tickets" replace />;
+  if (!auth.userId || !auth.token) return <Navigate to="/login" replace />;
+  if (!auth.role || !allowedRoles.includes(auth.role)) return <Navigate to="/tickets" replace />;
   return <Outlet />;
 }

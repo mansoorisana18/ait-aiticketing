@@ -12,110 +12,114 @@ import {
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import type { TicketResponseBean, UserRole } from "../../../api/types";
+import type { TicketResponseBean, UserRole, UserTicketResponseBean } from "../../../api/types";
 import { statusChipSx } from "./statusColors";
-import { formatDateTime } from "../../../utils/dateTime";
+import { formatRelative } from "../../../utils/dateTime";
+
+type AnyTicketRow = TicketResponseBean | UserTicketResponseBean;
 
 type Props = {
-  tickets: TicketResponseBean[];
+  tickets: AnyTicketRow[];
   role: UserRole;
 };
+
+function isInternal(t: AnyTicketRow): t is TicketResponseBean {
+  return (t as any).status !== undefined && (t as any).userTicketStatus !== undefined;
+}
 
 export default function TicketTable({ tickets, role }: Props) {
   const nav = useNavigate();
 
-  const showAssignmentCols = role === "AGENT" || role === "ADMIN";
-  const showInternalMetaCols = role === "AGENT" || role === "ADMIN"; // category/priority later (not for USER)
+  const showInternalCols = role === "AGENT" || role === "ADMIN";
 
   return (
     <TableContainer component={Paper} variant="outlined">
       <Table size="medium">
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 800 }}>ID</TableCell>
-            <TableCell sx={{ fontWeight: 800 }}>Title</TableCell>
-            <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+            <TableCell sx={{ fontWeight: 900 }}>ID</TableCell>
+            <TableCell sx={{ fontWeight: 900 }}>Title</TableCell>
+            <TableCell sx={{ fontWeight: 900 }}>User Status</TableCell>
 
-            {/* Internal fields (do NOT show to USER) */}
-            {showInternalMetaCols && <TableCell sx={{ fontWeight: 800 }}>Category</TableCell>}
-            {showInternalMetaCols && <TableCell sx={{ fontWeight: 800 }}>Priority</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Internal</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Duplicate</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Category</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Priority</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>AI Confidence</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Text Version</TableCell>}
+            {showInternalCols && <TableCell sx={{ fontWeight: 900 }}>Assigned</TableCell>}
 
-            {showAssignmentCols && <TableCell sx={{ fontWeight: 800 }}>Assigned</TableCell>}
-
-            <TableCell sx={{ fontWeight: 800 }}>Updated</TableCell>
-            <TableCell sx={{ fontWeight: 800 }}>Requester</TableCell>
+            <TableCell sx={{ fontWeight: 900 }}>Updated</TableCell>
           </TableRow>
         </TableHead>
 
         <TableBody>
-          {tickets.map((t) => (
-            <TableRow
-              key={t.ticketId}
-              hover
-              onClick={() => nav(`/tickets/${t.ticketId}`)}
-              sx={{ cursor: "pointer" }}
-            >
-              <TableCell>{t.ticketId}</TableCell>
+          {tickets.map((t) => {
+            const internal = isInternal(t);
 
-              <TableCell>
-                <Typography fontWeight={700}>{t.title}</Typography>
-                <Typography variant="body2" color="text.secondary" noWrap>
-                  {t.description}
-                </Typography>
-              </TableCell>
+            return (
+              <TableRow
+                key={t.ticketId}
+                hover
+                onClick={() => nav(`/tickets/${t.ticketId}`)}
+                sx={{ cursor: "pointer" }}
+              >
+                <TableCell>{t.ticketId}</TableCell>
 
-              <TableCell>
-                <Chip label={t.status} size="small" sx={statusChipSx(t.status)} />
-              </TableCell>
-
-              {showInternalMetaCols && (
                 <TableCell>
-                  {t.aiCategory ? (
-                    <Typography variant="body2">{t.aiCategory}</Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">—</Typography>
-                  )}
-                </TableCell>
-              )}
-
-              {showInternalMetaCols && (
-                <TableCell>
-                  {t.aiPriority ? (
-                    <Typography variant="body2">{t.aiPriority}</Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">—</Typography>
-                  )}
-                </TableCell>
-              )}
-
-              {showAssignmentCols && (
-                <TableCell>
-                  {t.assignedToName ? (
-                    <Typography variant="body2">{t.assignedToName}</Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">Unassigned</Typography>
-                  )}
-                </TableCell>
-              )}
-
-              <TableCell>
-                <Typography variant="body2">{formatDateTime(t.updatedAt) || "—"}</Typography>
-              </TableCell>
-
-              <TableCell>
-                <Box>
-                  <Typography variant="body2">{t.createdByName}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {t.createdByEmail}
+                  <Typography fontWeight={800}>{t.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {t.description}
                   </Typography>
-                </Box>
-              </TableCell>
-            </TableRow>
-          ))}
+                </TableCell>
+
+                <TableCell>
+                  <Chip label={t.userTicketStatus} size="small" sx={{ ...statusChipSx(t.userTicketStatus), fontWeight: 700 }} />
+                </TableCell>
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? <Chip label={t.status} size="small" sx={{ ...statusChipSx(t.status), fontWeight: 700 }} /> : "—"}
+                  </TableCell>
+                )}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? (t.duplicateState ?? "—") : "—"}
+                  </TableCell>
+                )}
+
+                {showInternalCols && <TableCell>{internal ? (t.aiCategory ?? "—") : "—"}</TableCell>}
+                {showInternalCols && <TableCell>{internal ? (t.aiPriority ?? "—") : "—"}</TableCell>}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? (t.aiConfidence ?? "—") : "—"}
+                  </TableCell>
+                )}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? (t.currentTextVersion ?? "—") : "—"}
+                  </TableCell>
+                )}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? (t.assignedToName ?? "Unassigned") : "—"}
+                  </TableCell>
+                )}
+
+                <TableCell>
+                  {formatRelative(t.updatedAt ?? null)}
+                </TableCell>
+              </TableRow>
+            );
+          })}
 
           {tickets.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} sx={{ py: 4 }}>
+              <TableCell colSpan={8} sx={{ py: 4 }}>
                 <Typography color="text.secondary">No tickets found.</Typography>
               </TableCell>
             </TableRow>

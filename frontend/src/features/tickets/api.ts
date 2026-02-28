@@ -1,5 +1,5 @@
 import { axiosClient } from "../../api/axiosClient";
-import type { TicketResponseBean } from "../../api/types";
+import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean } from "../../api/types";
 
 export type CreateTicketRequest = { title: string; description: string };
 
@@ -8,22 +8,61 @@ export async function createTicketApi(body: CreateTicketRequest): Promise<Ticket
   return res.data;
 }
 
-export async function ticketsForUserApi(): Promise<TicketResponseBean[]> {
-  const res = await axiosClient.get<TicketResponseBean[]>("/api/tickets");
+//USER tickets
+export async function fetchTicketsForUser(): Promise<UserTicketResponseBean[]> {
+  const res = await axiosClient.get<UserTicketResponseBean[]>("/api/tickets");
   return res.data;
 }
 
-export async function ticketByIdApi(ticketId: number): Promise<TicketResponseBean> {
+export async function fetchTicketByIdForUser(ticketId: number): Promise<UserTicketResponseBean> {
+  const res = await axiosClient.get<UserTicketResponseBean>(`/api/tickets/user/${ticketId}`);
+  return res.data;
+}
+
+//AGENT/ADMIN tickets
+export async function fetchTicketByIdInternal(ticketId: number): Promise<TicketResponseBean> {
   const res = await axiosClient.get<TicketResponseBean>(`/api/tickets/${ticketId}`);
   return res.data;
 }
 
-export async function allTicketsAdminApi(): Promise<TicketResponseBean[]> {
+export async function fetchAllTicketsAdmin(): Promise<TicketResponseBean[]> {
   const res = await axiosClient.get<TicketResponseBean[]>("/api/tickets/admin/all");
   return res.data;
 }
 
-export async function ticketsForAgentApi(): Promise<TicketResponseBean[]> {
+export async function fetchTicketsForAgent(): Promise<TicketResponseBean[]> {
   const res = await axiosClient.get<TicketResponseBean[]>("/api/tickets/agent");
+  return res.data;
+}
+
+//COMMENTS
+export async function fetchTicketComments(ticketId: number): Promise<TicketCommentResponseBean[]> {
+  const res = await axiosClient.get<TicketCommentResponseBean[]>(`/api/tickets/${ticketId}/comments`);
+  return res.data;
+}
+
+export async function createTicketComment(
+  ticketId: number,
+  body: TicketCommentRequestBean
+): Promise<TicketCommentResponseBean> {
+  const res = await axiosClient.post<TicketCommentResponseBean>(`/api/tickets/${ticketId}/comments`, body);
+  return res.data;
+}
+
+//ADMIN OVERRIDE
+export async function adminOverrideTicket(
+  ticketId: number,
+  body: AdminOverrideRequestBean
+): Promise<AdminOverrideResponseBean> {
+  const res = await axiosClient.patch<AdminOverrideResponseBean>(`/api/tickets/${ticketId}/admin/override`, body);
+  return res.data;
+}
+
+//AGENT TICKET STATUS UPDATE
+export async function updateTicketStatusByAgent(
+  ticketId: number,
+  body: UpdateTicketStatusRequestBean
+): Promise<TicketResponseBean> {
+  const res = await axiosClient.patch<TicketResponseBean>(`/api/tickets/${ticketId}/agent/status`, body);
   return res.data;
 }

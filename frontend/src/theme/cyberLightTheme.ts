@@ -4,29 +4,33 @@ const cyberLightTheme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#E6399B",
-      light: "#FF6DBE",
-      dark: "#B02674",
+      main: "#023047",       // deep navy
+      light: "#219EBC",      // teal
       contrastText: "#FFFFFF",
     },
     secondary: {
-      main: "#8A56AC",
-      light: "#A374D5",
-      dark: "#633D7D",
-      contrastText: "#FFFFFF",
+      main: "#8ECAE6",       // soft sky
+      contrastText: "#023047",
     },
     background: {
-      default: "#FFFFFF",
-      paper: "#FBF9FE",
+      default: "#F4FAFD",    // very light tint of palette
+      paper: "#FFFFFF",
     },
     text: {
-      primary: "#1A0B2E",
-      secondary: "#6E5D7E",
+      primary: "#023047",
+      secondary: "#5A6B75",
     },
     info: {
-      main: "#00B4D8",
+      main: "#219EBC",
+      contrastText: "#FFFFFF",
     },
-    divider: "rgba(138, 86, 172, 0.10)",
+    warning: {
+      main: "#FFB703",
+    },
+    error: {
+      main: "#FB8500",
+    },
+    divider: "rgba(2,48,71,0.12)",
   },
 
   shape: {
@@ -45,11 +49,10 @@ const cyberLightTheme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          // light background with subtle cyber glow (very mild)
           backgroundImage:
-            "radial-gradient(900px 600px at 15% 10%, rgba(230,57,155,0.08), transparent 60%)," +
-            "radial-gradient(900px 600px at 85% 15%, rgba(138,86,172,0.07), transparent 60%)," +
-            "radial-gradient(900px 600px at 70% 85%, rgba(0,180,216,0.06), transparent 60%)",
+            "radial-gradient(900px 600px at 15% 10%, rgba(142,202,230,0.20), transparent 60%)," +
+            "radial-gradient(900px 600px at 85% 15%, rgba(33,158,188,0.18), transparent 60%)," +
+            "radial-gradient(900px 600px at 70% 85%, rgba(255,183,3,0.12), transparent 60%)",
           backgroundAttachment: "fixed",
         },
       },
@@ -58,11 +61,13 @@ const cyberLightTheme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          // light appbar with neon accent line
           background: "#FFFFFF",
-          color: "#1A0B2E",
-          borderBottom: "1px solid rgba(138, 86, 172, 0.12)",
-          boxShadow: "0px 2px 12px rgba(138, 86, 172, 0.06)",
+          color: "#023047",
+          borderBottom: "1px solid rgba(2,48,71,0.10)",
+          boxShadow: "0px 2px 12px rgba(2,48,71,0.08)",
+        },
+        colorPrimary: {
+          background: "linear-gradient(90deg,#023047 0%,#219EBC 100%)",
         },
       },
     },
@@ -78,8 +83,8 @@ const cyberLightTheme = createTheme({
     MuiDrawer: {
       styleOverrides: {
         paper: {
-          background: "#FBF9FE",
-          borderRight: "1px solid rgba(138, 86, 172, 0.12)",
+          backgroundColor: "#8ECAE6",
+          borderRight: "1px solid rgba(2,48,71,0.10)",
         },
       },
     },
@@ -88,10 +93,7 @@ const cyberLightTheme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 10,
-          marginLeft: 8,
-          marginRight: 8,
-          marginTop: 4,
-          marginBottom: 4,
+          margin: "4px 8px",
         },
       },
     },
@@ -99,11 +101,10 @@ const cyberLightTheme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          // cards/panels: crisp, light, slightly tinted
-          border: "1px solid rgba(138, 86, 172, 0.10)",
-          boxShadow: "0px 6px 24px rgba(138, 86, 172, 0.06)",
+          border: "1px solid rgba(2,48,71,0.08)",
+          boxShadow: "0px 6px 24px rgba(2,48,71,0.08)",
           backgroundImage:
-            "linear-gradient(180deg, rgba(255,255,255,0.90), rgba(251,249,254,0.90))",
+            "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(244,250,253,0.95))",
         },
       },
     },
@@ -111,23 +112,28 @@ const cyberLightTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          border: "1px solid rgba(138, 86, 172, 0.10)",
-          boxShadow: "0px 6px 24px rgba(138, 86, 172, 0.06)",
+          border: "1px solid rgba(2,48,71,0.08)",
+          boxShadow: "0px 6px 24px rgba(2,48,71,0.08)",
         },
       },
     },
 
     MuiButton: {
       styleOverrides: {
-        root: {
-          borderRadius: 10,
-          fontWeight: 600,
-        },
         containedPrimary: {
-          boxShadow: "0px 8px 18px rgba(230,57,155,0.18)",
+          backgroundColor: "#023047",
+          color: "#fff",
+          "&:hover": {
+            backgroundColor: "#219EBC",
+          },
         },
         containedSecondary: {
-          boxShadow: "0px 8px 18px rgba(138,86,172,0.18)",
+          backgroundColor: "#FFB703",
+          color: "#023047",
+          "&:hover": {
+            backgroundColor: "#FB8500",
+            color: "#fff",
+          },
         },
       },
     },
@@ -144,7 +150,7 @@ const cyberLightTheme = createTheme({
     MuiInputLabel: {
       styleOverrides: {
         root: {
-          color: "#6E5D7E",
+          color: "#5A6B75",
         },
       },
     },

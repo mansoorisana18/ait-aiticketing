@@ -19,18 +19,15 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import ManageUsersPage from "../features/admin/pages/ManageUsersPage";
 
 function HomeRedirect() {
-  const { auth, isAuthReady } = useAuth();
+  const { auth } = useAuth();
 
-  // Wait for storage hydration (prevents refresh -> login flicker)
-  if (!isAuthReady) return <LoadingSkeleton variant="list" count={4} />;
+  if (auth.isBootstrapping) return <LoadingSkeleton variant="list" count={4} />;
+  if (!auth.userId || !auth.token) return <Navigate to="/login" replace />;
 
-  // Not logged in
-  if (!auth.userId) return <Navigate to="/login" replace />;
-
-  // Logged in: role-based landing
+  //Logged in: role-based landing
   if (auth.role === "ADMIN") return <Navigate to="/admin/tickets" replace />;
   if (auth.role === "AGENT") return <Navigate to="/agent/tickets" replace />;
-  return <Navigate to="/tickets" replace />; // USER default
+  return <Navigate to="/tickets" replace />; //USER default
 }
 
 export default function AppRoutes() {

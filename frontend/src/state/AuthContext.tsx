@@ -1,51 +1,108 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react";
 import { authReducer, initialAuthState, type AuthPayload, type AuthState } from "./authReducer";
 import { clearAuthStorage, getAuthFromStorage, setAuthToStorage } from "../utils/storage";
+import { axiosClient } from "../api/axiosClient";
+import { setAccessToken, clearAccessToken } from "../api/authToken";
+import type { LoginResponseBean, UserRole } from "../api/types";
+import { subscribeSessionExpired } from "./authEvents";
+
+type StoredProfile = { userId: number; name: string; email: string; role: UserRole };
 
 type AuthContextValue = {
   auth: AuthState;
-  isAuthReady: boolean;
   loginSuccess: (payload: AuthPayload) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
-// Type guard: ensures stored object is safe to use as AuthPayload
-function isAuthPayload(x: unknown): x is AuthPayload {
+function isStoredProfile(x: unknown): x is StoredProfile {
   if (!x || typeof x !== "object") return false;
   const o = x as any;
-  return typeof o.userId === "number" && typeof o.email === "string" && typeof o.name === "string";
+  return typeof o.userId === "number" && typeof o.email === "string" && typeof o.name === "string" && typeof o.role === "string";
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialAuthState);
-  const [isAuthReady, setIsAuthReady] = useState(false); 
 
+  //Bootstrap once per page load: attempt /refresh using HttpOnly cookie
   useEffect(() => {
-    const stored = getAuthFromStorage(); // returns AuthState | null (or unknown depending on your typing)
-    if (isAuthPayload(stored)) {
-      dispatch({ type: "LOGIN_SUCCESS", payload: stored });
-    }
-    // Mark hydration complete whether we had data or not
-    setIsAuthReady(true);
+    let cancelled = false;
+
+    (async () => {
+      dispatch({ type: "BOOTSTRAP_START" });
+
+      //read stored profile from storage for UI first, this doesn't mean user is authenticated since we don't have token yet, we need to call /refresh to verify and get token
+      const stored = getAuthFromStorage();
+      if (isStoredProfile(stored) && !cancelled) {
+        //we don't dispatch LOGIN_SUCCESS here because token is missing until refresh succeeds, we just populate profile data for better UX while refresh is in-flight
+      }
+
+      try {
+        //If refresh cookie exists, backend returns LoginResponseBean with data.token
+        const res = await axiosClient.post<LoginResponseBean>("/api/users/refresh", null);
+        if (cancelled) return;
+
+        const data = res.data;
+        //store acccess token in memory
+        setAccessToken(data.token);
+
+        //persist profile without access token in localstorage
+        setAuthToStorage({ userId: data.userId, email: data.email, name: data.name, role: data.role });
+
+        dispatch({
+          type: "LOGIN_SUCCESS",
+          payload: { userId: data.userId, email: data.email, name: data.name, role: data.role ?? "USER", token: data.token },
+        });
+      } catch {
+        if (cancelled) return;
+        clearAccessToken();
+        clearAuthStorage();
+        dispatch({ type: "BOOTSTRAP_DONE" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  //Keep authToken.ts synced with current state.token so axios interceptors can attach Authorization
   useEffect(() => {
-    if (!isAuthReady) return; //preventing premature clear
+    setAccessToken(state.token);
+  }, [state.token]);
 
-    if (state.userId) setAuthToStorage(state);
-    else clearAuthStorage();
-  }, [state, isAuthReady]);
+  const loginSuccess = (payload: AuthPayload) => {
+    setAccessToken(payload.token);
+    setAuthToStorage({ userId: payload.userId, email: payload.email, name: payload.name, role: payload.role });
+    dispatch({ type: "LOGIN_SUCCESS", payload });
+  };
+
+  const logout = async () => {
+    try {
+      //authenticated endpoint requires Authorization header
+      await axiosClient.post("/api/users/logout", null);
+    } finally {
+      clearAccessToken();
+      clearAuthStorage();
+      dispatch({ type: "LOGOUT" });
+    }
+  };
+  
+  useEffect(() => {
+    const unsub = subscribeSessionExpired(() => {
+      clearAccessToken();
+      clearAuthStorage();
+      dispatch({ type: "LOGOUT" });
+    });
+
+    return unsub;
+  }, []);
+
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      auth: state,
-      isAuthReady,
-      loginSuccess: (payload) => dispatch({ type: "LOGIN_SUCCESS", payload }),
-      logout: () => dispatch({ type: "LOGOUT" }),
-    }),
-    [state, isAuthReady]
+    () => ({ auth: state, loginSuccess, logout }),
+    [state]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

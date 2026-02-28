@@ -27,20 +27,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAgent = auth.role === "AGENT";
   const isAdmin = auth.role === "ADMIN";
 
-  // Sidebar links per role (KB included but screens not built yet)
+  //Sidebar links per role (KB is included but screens not built yet)
   const links: NavItem[] = [
-    // Tickets
+    //Tickets
     { to: "/tickets", label: "My Tickets", show: isUser },
     { to: "/tickets/new", label: "Create Ticket", show: isUser },
 
-    // Agent routes
+    //Agent routes
     { to: "/agent/tickets", label: "Assigned to Me", show: isAgent },
 
-    // Admin routes
+    //Admin routes
     { to: "/admin/tickets", label: "All Tickets", show: isAdmin },
     { to: "/admin/users", label: "Manage Users", show: isAdmin },
     
-    // Knowledge Base placeholder routes (no pages yet)
+    //Knowledge Base placeholder routes (no pages yet)
     { to: "/kb", label: "Knowledge Base", show: true },
     { to: "/kb/my-submissions", label: "My KB Submissions", show: isAgent },
     { to: "/kb/approvals", label: "KB Approvals", show: isAdmin },
@@ -65,9 +65,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         position="fixed"
         sx={{
           zIndex: (t) => t.zIndex.drawer + 1,
-          background: "linear-gradient(90deg, rgba(230,57,155,0.95), rgba(138,86,172,0.95))",
+          // background: "linear-gradient(90deg, rgba(230,57,155,0.95), rgba(138,86,172,0.95))",
+          // color: "#fff",
+          // boxShadow: "0px 10px 30px rgba(138,86,172,0.18)",
+          background: "linear-gradient(90deg, #023E8A 0%, #0077B6 100%)",
           color: "#fff",
-          boxShadow: "0px 10px 30px rgba(138,86,172,0.18)",
+          boxShadow: "0px 10px 30px rgba(2,62,138,0.18)",
         }}
       >
         <Toolbar sx={{ display: "flex", justifyContent: "space-between" }}>
@@ -132,8 +135,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
-            bgcolor: "background.paper",
-            borderRight: "1px solid rgba(138,86,172,0.12)",
+            // bgcolor: "background.paper",
+            // borderRight: "1px solid rgba(138,86,172,0.12)",
+            bgcolor: "#008da6",
+            borderRight: "1px solid rgba(0,119,182,0.12)",
           },
         }}
       >
@@ -145,15 +150,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               component={Link}
               to={l.to}
               selected={isSelected(l.to)}
-              sx={{ mx: 1, my: 0.5, borderRadius: 2 }}
+              // sx={{ mx: 1, my: 0.5, borderRadius: 1, borderColor: "rgba(0,0,0,0.12)", border: "1px solid" }}
+            sx={{
+              border: 'none',
+              '&.Mui-selected': {
+                border: '1px solid',
+                borderColor: 'primary.main',
+                borderRadius: 1,
+              },
+            }}
             >
-              <ListItemText primary={l.label} />
+              <ListItemText primary={l.label} primaryTypographyProps={{ sx: { fontWeight: 700, color: 'text.primary' } }}/>
             </ListItemButton>
           ))}
         </List>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: "#dbf4ff", minHeight: "100vh" }}>
         <Toolbar />
         {children}
       </Box>

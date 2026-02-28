@@ -1,20 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Paper,
-  Snackbar,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Chip, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, } from "@mui/material";
 import { useAuth } from "../../../state/AuthContext";
 import LoadingSkeleton from "../../../components/LoadingSkeleton";
 import type { UserResponseBean } from "../../../api/types";
@@ -28,7 +13,7 @@ function roleChipColor(role: string): "default" | "success" | "secondary" {
 
 export default function ManageUsersPage() {
   const { auth } = useAuth();
-  const { data, isLoading } = useUsersForAdmin(Boolean(auth.userId));
+  const { data, isLoading } = useUsersForAdmin(Boolean(auth.token && auth.role === "ADMIN"));
   const makeAgent = useMakeAgentByAdmin();
 
   const [snack, setSnack] = useState<{ open: boolean; msg: string; severity: "success" | "error" }>({

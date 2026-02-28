@@ -16,29 +16,32 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 export type UserRole = "USER" | "AGENT" | "ADMIN";
 
+export type TicketStatus =
+  | "NEW"
+  | "AI_PROCESSING"
+  | "VAGUE"
+  | "READY"
+  | "IN_PROGRESS"
+  | "DUPLICATE"
+  | "RESOLVED"
+  | "CLOSED";
+
+export type DuplicateState = "NONE" | "POTENTIAL" | "CONFIRMED";
+
+export type AdminOverrideType =
+  | "CATEGORY"
+  | "PRIORITY"
+  | "DUPLICATE_LINK"
+  | "STATUS"
+  | "KB_DRAFT"
+  | "ASSIGNMENT";
+
 export type LoginResponseBean = {
   userId: number;
   email: string;
   name: string;
   role: UserRole;
-  sessionToken: string; // currently returned by backend
-};
-
-export type TicketResponseBean = {
-  ticketId: number;
-  title: string;
-  description: string;
-  status: string; // OPEN, etc
-  createdAt: string;
-  updatedAt: string;
-  createdByUserId: number;
-  createdByName: string;
-  createdByEmail: string;
-
-  assignedToUserId?: number;
-  assignedToName?: string;
-  aiCategory?: string;
-  aiPriority?: string;
+  token: string; //JWT access token returned by backend
 };
 
 export type UserResponseBean = {
@@ -46,4 +49,85 @@ export type UserResponseBean = {
   email: string;
   name: string;
   role: UserRole;
+};
+
+//USER view ticket bean - only includes fields relevant to the user
+export type UserTicketResponseBean = {
+  ticketId: number;
+  title: string;
+  description: string;
+  userTicketStatus: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  createdByUserId?: number;
+  createdByName?: string;
+  createdByEmail?: string;
+  assignedToName?: string | null;
+};
+
+//ADMIN/AGENT view ticket bean - includes all fields, including those relevant to the agent/admin
+export type TicketResponseBean = {
+  ticketId: number;
+  title: string;
+  description: string;
+  status: TicketStatus; //intenal status used by backend
+  userTicketStatus: string; //ticket status as seen by user
+  aiCategory?: string | null;
+  aiPriority?: string | null;
+  aiConfidence?: string | number | null;
+  currentTextVersion?: number | null;
+  duplicateState?: DuplicateState | string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  createdByUserId: number;
+  createdByName: string;
+  createdByEmail: string;
+  assignedToUserId?: number | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+};
+
+//ticket comments
+export type CommentVisibility = "PUBLIC" | "INTERNAL";
+
+export type TicketCommentRequestBean = {
+  body: string;
+  visibility: CommentVisibility;
+};
+
+export type TicketCommentResponseBean = {
+  commentId: number;
+  ticketId: number;
+  body: string;
+  visibility: CommentVisibility;
+  createdAt?: string | null;
+  authorUserId: number;
+  authorName: string;
+  authorEmail: string;
+};
+
+//Admin ticket override
+export type AdminOverrideRequestBean = {
+  overrideType: AdminOverrideType;
+  newValue?: string | null; //used for STATUS/CATEGORY/PRIORITY/DUPLICATE_LINK/KB_DRAFT
+  newAssignedToUserId?: number | null; //used for ASSIGNMENT
+  reason?: string | null;
+};
+
+export type AdminOverrideResponseBean = {
+  overrideId: number;
+  ticketId: number;
+  overrideType: AdminOverrideType;
+  oldValue?: string | null;
+  newValue?: string | null;
+  reason?: string | null;
+  createdAt?: string | null;
+  overriddenByUserId: number;
+  overriddenByName: string;
+  overriddenByEmail: string;
+};
+
+//Agent Ticket Status Update
+export type UpdateTicketStatusRequestBean = {
+  status: "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 };

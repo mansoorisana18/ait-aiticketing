@@ -7,7 +7,7 @@ import { useTicketsForAgent } from "../../tickets/hooks";
 
 export default function AgentTicketsPage() {
   const { auth } = useAuth();
-  const { data, isLoading } = useTicketsForAgent(Boolean(auth.userId));
+  const { data, isLoading } = useTicketsForAgent(Boolean(auth.token && auth.role==="AGENT"));
 
   if (isLoading) return <LoadingSkeleton variant="list" count={6} />;
 
@@ -19,7 +19,7 @@ export default function AgentTicketsPage() {
       </Typography>
 
       {/* Filters (status)*/}
-      <TicketTable tickets={data ?? []} role={auth.role} />
+      <TicketTable tickets={data ?? []} role={auth.role ?? "AGENT"} />
     </Stack>
   );
 }

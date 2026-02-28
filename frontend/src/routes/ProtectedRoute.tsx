@@ -5,10 +5,10 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { useAuth } from "../state/AuthContext";
 
 export default function ProtectedRoute() {
-  const { auth, isAuthReady } = useAuth();
+  const { auth } = useAuth();
 
-  //don’t redirect during hydration
-  if (!isAuthReady) {
+  //show loader while startup /refresh is happening
+  if (auth.isBootstrapping) {
     return (
       <Box sx={{ p: 3 }}>
         <LoadingSkeleton variant="list" count={5} />
@@ -16,6 +16,7 @@ export default function ProtectedRoute() {
     );
   }
 
-  if (!auth.userId) return <Navigate to="/login" replace />;
+  //enforcing auth afetr bootstrapping is done
+  if (!auth.userId || !auth.token) return <Navigate to="/login" replace />;
   return <Outlet />;
 }

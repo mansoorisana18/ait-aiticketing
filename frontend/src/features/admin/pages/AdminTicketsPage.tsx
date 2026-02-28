@@ -19,7 +19,7 @@ export default function AdminTicketsPage() {
 
       {/* Filters: status + assignee (future) */}
 
-      <TicketTable tickets={data ?? []} role={auth.role} />
+      <TicketTable tickets={data ?? []} role={auth.role ?? "ADMIN"} />
     </Stack>
   );
 }

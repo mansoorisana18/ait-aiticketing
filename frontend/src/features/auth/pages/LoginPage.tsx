@@ -7,6 +7,7 @@ import { useLogin } from "../hooks";
 import { normalizeApiError } from "../../../api/errorNormalizer";
 import { useAuth } from "../../../state/AuthContext";
 import logo from "../../../assets/Logo_AiT.png";
+import { subscribeSessionExpired } from "../../../state/authEvents";
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -19,6 +20,17 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [snack, setSnack] = useState({ open: false, message: "" });
 
+  React.useEffect(() => {
+  const unsub = subscribeSessionExpired(() => {
+    setSnack({
+      open: true,
+      message: "Session expired. Please login again.",
+    });
+  });
+
+  return unsub;
+}, []);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
@@ -30,7 +42,7 @@ export default function LoginPage() {
         name: resp.name,
         email: resp.email,
         role: resp.role ?? "USER",
-        sessionToken: resp.sessionToken ?? null,
+        token: resp.token ?? null,
       });
 
       nav("/");

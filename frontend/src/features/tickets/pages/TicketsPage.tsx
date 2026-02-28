@@ -7,19 +7,18 @@ import TicketTable from "../components/TicketTable";
 
 export default function TicketsPage() {
   const { auth } = useAuth();
-  const { data, isLoading } = useTicketsForUser(Boolean(auth.userId));
+  const { data, isLoading, isError } = useTicketsForUser(Boolean(auth.token));
 
   if (isLoading) return <LoadingSkeleton variant="list" count={5} />;
-
+  if (isError) return <Typography color="error">Failed to load tickets.</Typography>;
+  
   return (
     <Stack spacing={2}>
       <Typography variant="h5" sx={{ fontWeight: 900 }}>
         My Tickets
       </Typography>
 
-      {/* Filter bar will come here */}
-
-      <TicketTable tickets={data ?? []} role={auth.role} />
+      <TicketTable tickets={data ?? []} role={auth.role ?? "USER"} />
     </Stack>
   );
 }
