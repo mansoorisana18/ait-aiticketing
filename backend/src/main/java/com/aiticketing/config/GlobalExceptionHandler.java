@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,7 +30,7 @@ public class GlobalExceptionHandler {
 	
 	private static final Logger EXCEPTION_HANDLER_LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 	
-	// Validation errors from @Valid on request body
+	//Validation errors from @Valid on request body
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponseBean<Object>> handleValidation(MethodArgumentNotValidException ex) {
     	EXCEPTION_HANDLER_LOG.info("GlobalExceptionHandler :: in handleValidation()");
@@ -40,7 +42,7 @@ public class GlobalExceptionHandler {
                 errors));
     }
 
-    // Constraint violations (like @RequestParam validation)
+    //Constraint violations (like @RequestParam validation)
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiResponseBean<Object>> handleConstraintViolation(ConstraintViolationException ex) {
     	EXCEPTION_HANDLER_LOG.info("GlobalExceptionHandler :: in handleConstraintViolation()");
@@ -55,7 +57,7 @@ public class GlobalExceptionHandler {
                 errors));
     }
 
-    // Bad JSON, wrong format, etc.
+    //Bad JSON, wrong format, etc.
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponseBean<Object>> handleUnreadable(HttpMessageNotReadableException ex) {
     	EXCEPTION_HANDLER_LOG.info("GlobalExceptionHandler :: in handleUnreadable()");
@@ -63,7 +65,7 @@ public class GlobalExceptionHandler {
                 .body(ApiResponseBean.failure("Malformed JSON request"));
     }
     
-    // /tickets/{id} where id is not a number, etc.
+    ///tickets/{id} where id is not a number, etc.
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponseBean<Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
     	EXCEPTION_HANDLER_LOG.info("GlobalExceptionHandler :: in handleTypeMismatch()");
@@ -82,6 +84,18 @@ public class GlobalExceptionHandler {
     	EXCEPTION_HANDLER_LOG.info("GlobalExceptionHandler :: in handleNotFound()");
     	return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponseBean.failure(ex.getMessage()));
     }
+    
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponseBean<Object>> handleDenied(AccessDeniedException ex) {
+    	EXCEPTION_HANDLER_LOG.warn("GlobalExceptionHandler :: in handleDenied() :: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponseBean.failure("Forbidden"));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponseBean<Object>> handleAuth(AuthenticationException ex) {
+    	EXCEPTION_HANDLER_LOG.warn("GlobalExceptionHandler :: in handleAuth() :: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponseBean.failure("Unauthorized"));
+    }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponseBean<Object>> handleUnauthorized(UnauthorizedException ex) {
@@ -95,7 +109,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponseBean.failure(ex.getMessage()));
     }
 
-    // fallback - internal server error
+    //fallback - internal server error
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseBean<Object>> handleAny(Exception ex, HttpServletRequest req) {
     	EXCEPTION_HANDLER_LOG.error("GlobalExceptionHandler :: in handleAny(): {} {}",

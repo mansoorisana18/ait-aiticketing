@@ -16,12 +16,12 @@ public class LoginResponseBean {
     @Schema(example = "USER")
     public String role;
 
-    @Schema(example = "session-token-placeholder")
-    public String sessionToken;
-
-	@Override
+    @Schema(example = "accessToken")
+    public String token;
+	
+    @Override
 	public String toString() {
 		return "LoginResponseBean [userId=" + userId + ", email=" + email + ", name=" + name + ", role=" + role
-				+ ", sessionToken=" + sessionToken + "]";
+				+ ", token=" + token + "]";
 	}
 }
