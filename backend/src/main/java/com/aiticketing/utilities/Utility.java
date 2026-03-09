@@ -1,6 +1,6 @@
 package com.aiticketing.utilities;
 
-import com.aiticketing.entity.TicketStatus;
+import com.aiticketing.entity.enums.TicketStatus;
 
 public class Utility {
 

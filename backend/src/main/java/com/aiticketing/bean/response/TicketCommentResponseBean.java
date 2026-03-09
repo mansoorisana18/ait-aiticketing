@@ -2,7 +2,7 @@ package com.aiticketing.bean.response;
 
 import java.time.OffsetDateTime;
 
-import com.aiticketing.entity.CommentVisibility;
+import com.aiticketing.entity.enums.CommentVisibility;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

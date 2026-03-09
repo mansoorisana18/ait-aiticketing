@@ -2,7 +2,7 @@ package com.aiticketing.bean.response;
 
 import java.time.OffsetDateTime;
 
-import com.aiticketing.entity.TicketStatus;
+import com.aiticketing.entity.enums.TicketStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -29,11 +29,15 @@ public class UserTicketResponseBean {
     
     public String assignedToName;
     
+    public String vagueReason;
+    public String clarificationPrompt;
+    
 	@Override
 	public String toString() {
-		return "TicketResponseBean [ticketId=" + ticketId + ", title=" + title + ", description=" + description
-				+ ", userTicketStatus=" + userTicketStatus + ", createdAt=" + createdAt + ", updatedAt=" + updatedAt + ", createdByUserId="
-				+ createdByUserId + ", createdByName=" + createdByName + ", createdByEmail=" + createdByEmail
-				+ ", assignedToName=" + assignedToName + "]";
+		return "UserTicketResponseBean [ticketId=" + ticketId + ", title=" + title + ", description=" + description
+				+ ", userTicketStatus=" + userTicketStatus + ", createdAt=" + createdAt + ", updatedAt=" + updatedAt
+				+ ", createdByUserId=" + createdByUserId + ", createdByName=" + createdByName + ", createdByEmail="
+				+ createdByEmail + ", assignedToName=" + assignedToName + ", vagueReason=" + vagueReason
+				+ ", clarificationPrompt=" + clarificationPrompt + "]";
 	}
 }

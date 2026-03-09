@@ -3,6 +3,7 @@ package com.aiticketing.service;
 import java.util.List;
 
 import com.aiticketing.bean.request.LoginRequestBean;
+import com.aiticketing.bean.request.PromoteToAgentRequestBean;
 import com.aiticketing.bean.request.RegisterUserRequestBean;
 import com.aiticketing.bean.response.LoginResponseBean;
 import com.aiticketing.bean.response.UserResponseBean;
@@ -21,6 +22,6 @@ public interface UserService {
     void logout(Long userId, HttpServletResponse response);
 	
 	List<UserResponseBean> getUsersForAdmin();
-	UserResponseBean updateToAgentByAdmin(Long userId);
+	UserResponseBean updateToAgentByAdmin(Long userId, PromoteToAgentRequestBean toAgentReq);
 
 }

@@ -1,5 +1,8 @@
 package com.aiticketing.service;
 
+import static com.aiticketing.ai.Taxonomy.CATEGORY_OPTIONS;
+import static com.aiticketing.ai.Taxonomy.normalize;
+
 import java.time.Duration;
 import java.util.List;
 
@@ -16,11 +19,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.aiticketing.bean.request.LoginRequestBean;
+import com.aiticketing.bean.request.PromoteToAgentRequestBean;
 import com.aiticketing.bean.request.RegisterUserRequestBean;
 import com.aiticketing.bean.response.LoginResponseBean;
 import com.aiticketing.bean.response.UserResponseBean;
 import com.aiticketing.entity.User;
-import com.aiticketing.entity.UserRole;
+import com.aiticketing.entity.enums.UserRole;
+import com.aiticketing.exception.BadRequestException;
 import com.aiticketing.exception.ConflictException;
 import com.aiticketing.exception.NotFoundException;
 import com.aiticketing.exception.UnauthorizedException;
@@ -175,15 +180,22 @@ public class UserServiceImpl implements UserService {
 	//////////////////Admin endpoints
 	
 	@Transactional
-	public UserResponseBean updateToAgentByAdmin(Long userId) {
-		USER_SERVICE_LOG.info("UserServiceImpl :: in updateToAgentByAdmin() :: userId {}", userId);
+	public UserResponseBean updateToAgentByAdmin(Long userId, PromoteToAgentRequestBean toAgentReq) {
+		USER_SERVICE_LOG.info("UserServiceImpl :: in updateToAgentByAdmin() :: userId {}, toAgentReq {}", userId, toAgentReq.toString());
 		User user = userRepo.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
 		if (user.getRole() == UserRole.AGENT) {
 			throw new ConflictException("User is already an agent");
 		}
-
+		
+		//to match our db accepted value case
+		String dept = normalize(toAgentReq.department);
+		if (dept == null || !CATEGORY_OPTIONS.contains(dept)) {
+	        throw new BadRequestException("Invalid department. Allowed: " + CATEGORY_OPTIONS);
+	    }
+		
 		user.setRole(UserRole.AGENT);
+		user.setDepartment(dept);
 
 		User saved = userRepo.save(user);
 
@@ -207,6 +219,7 @@ public class UserServiceImpl implements UserService {
 		r.name = u.getUsername();
 		r.email = u.getEmail();
 		r.role = u.getRole();
+		r.department = u.getDepartment();
 
 		USER_SERVICE_LOG.info("UserServiceImpl :: exit setUsersResponseBean()");
 		return r;

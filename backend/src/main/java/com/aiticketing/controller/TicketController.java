@@ -20,10 +20,12 @@ import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
+import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
 import com.aiticketing.bean.response.ApiResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
+import com.aiticketing.bean.response.TicketTextVersionResponseBean;
 import com.aiticketing.bean.response.UserTicketResponseBean;
 import com.aiticketing.security.AuthUserPrincipal;
 import com.aiticketing.service.TicketService;
@@ -70,6 +72,31 @@ public class TicketController {
 		UserTicketResponseBean resp = ticketService.createTicket(userId, createTicketReq);
 		TICKET_CONTROLLER_LOG.info("TicketController :: exit createTicket()");
 		return ResponseEntity.status(201).body(ApiResponseBean.success("Ticket created", resp));
+	}
+	
+	@Operation(
+	    summary = "User: clarify a vague ticket",
+	    description = "Allows the ticket owner to answer the clarification prompt for a ticket previously marked as VAGUE. A new text version is created and AI triage is requested again."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(responseCode = "200", description = "Ticket updated and triage re-requested"),
+	    @ApiResponse(responseCode = "400", description = "Ticket is not vague or request is invalid"),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "404", description = "Ticket not found")
+	})
+	@PatchMapping("/user/{ticketId}/clarify")
+	public ResponseEntity<ApiResponseBean<UserTicketResponseBean>> clarifyVagueTicket(
+	        @PathVariable Long ticketId,
+	        @AuthenticationPrincipal AuthUserPrincipal principal,
+	        @Valid @RequestBody UpdateVagueTicketRequestBean req) {
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: in clarifyVagueTicket() :: ticketId={}", ticketId);
+
+	    Long userId = principal.getUserId();
+	    UserTicketResponseBean resp = ticketService.clarifyVagueTicket(userId, ticketId, req);
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit clarifyVagueTicket()");
+	    return ResponseEntity.ok(ApiResponseBean.success("Ticket updated and triage re-requested", resp));
 	}
 
 	//USER: Lists all tickets for a user with user ticket response fields
@@ -199,6 +226,27 @@ public class TicketController {
 	    TicketResponseBean resp = ticketService.updateTicketStatusByAgent(agentUserId, ticketId, req);
 	    TICKET_CONTROLLER_LOG.info("TicketController :: exit updateTicketStatusByAgent()");
 	    return ResponseEntity.ok(ApiResponseBean.success("Status updated", resp));
+	}
+	
+	@Operation(
+	    summary = "Admin/Agent: get ticket text version history",
+	    description = "Returns the version history of a ticket's title and description for audit and review."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(responseCode = "200", description = "Ticket history fetched successfully"),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "404", description = "Ticket not found")
+	})
+	@GetMapping("/{ticketId}/text-version-history")
+	public ResponseEntity<ApiResponseBean<List<TicketTextVersionResponseBean>>> getTicketHistory(
+	        @PathVariable Long ticketId) {
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: in getTicketHistory() :: ticketId={}", ticketId);
+
+	    List<TicketTextVersionResponseBean> resp = ticketService.getTicketHistory(ticketId);
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit getTicketHistory()");
+	    return ResponseEntity.ok(ApiResponseBean.success(resp));
 	}
 	
 }

@@ -5,6 +5,8 @@ import java.time.OffsetDateTime;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.aiticketing.entity.enums.UserRole;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -36,6 +38,9 @@ public class User {
 	
 	@Column(name = "user_password", length = 255, nullable = false)
 	private String password;
+	
+	@Column(name = "user_department", length = 80)
+	private String department;
 	
 	public Long getUserId() {
 		return userId;
@@ -83,5 +88,13 @@ public class User {
 	
 	public void setPassword(String password) {
 		this.password = password;
+	}
+
+	public String getDepartment() {
+		return department;
+	}
+
+	public void setDepartment(String department) {
+		this.department = department;
 	}
 }

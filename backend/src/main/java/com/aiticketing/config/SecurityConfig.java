@@ -62,20 +62,32 @@ public class SecurityConfig {
 	                //Logout requires auth so that we can revoke that users refresh token
 	                .requestMatchers(HttpMethod.POST, "/api/users/logout").authenticated()
 	                
-	                //admin endpoints
-	                .requestMatchers("/api/users/admin/**").hasRole("ADMIN")
-	                .requestMatchers("/api/tickets/admin/**").hasRole("ADMIN")
-	
-	                //agent endpoint
-	                .requestMatchers("/api/tickets/agent/**").hasAnyRole("AGENT", "ADMIN")
-	
-	                //Ticket endpoints only for authenticated users
-	                .requestMatchers(HttpMethod.POST, "/api/tickets").hasAnyRole("USER", "ADMIN", "AGENT")
-	                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAnyRole("USER", "ADMIN", "AGENT")
+	                //admin user endpoints
+	                .requestMatchers(HttpMethod.GET, "/api/users/admin").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.PATCH, "/api/users/admin/**").hasRole("ADMIN")
+
+	                //admin ticket endpoints
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/admin/**").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.PATCH, "/api/tickets/*/admin/override").hasRole("ADMIN")
+
+	                //agent + admin internal ticket endpoints
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/agent").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/agent/**").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.PATCH, "/api/tickets/*/agent/status").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/history").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/*").hasAnyRole("AGENT", "ADMIN")
+
+	                //user scoped Tticket endpoints
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/user/**").hasRole("USER")
-	
-//	                // Comments endpoint allow authenticated roles. service will filter/validate visibility
-//	                .requestMatchers("/api/tickets/*/comments/**").authenticated()
+	                .requestMatchers(HttpMethod.PATCH, "/api/tickets/user/*/clarify").hasRole("USER")
+
+	                //Ticket endpoints only for authenticated users
+	                .requestMatchers(HttpMethod.POST, "/api/tickets").hasAnyRole("USER", "AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAnyRole("USER", "AGENT", "ADMIN")
+
+	                //Comments for authenticated roles, service layer enforces visibility and ownership
+	                .requestMatchers(HttpMethod.POST, "/api/tickets/*/comments").hasAnyRole("USER", "AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/comments").hasAnyRole("USER", "AGENT", "ADMIN")
 	
 	                //Default every other requests requires auth
 	                .anyRequest().authenticated()

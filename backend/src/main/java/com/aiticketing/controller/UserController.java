@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.aiticketing.bean.request.LoginRequestBean;
+import com.aiticketing.bean.request.PromoteToAgentRequestBean;
 import com.aiticketing.bean.request.RegisterUserRequestBean;
 import com.aiticketing.bean.response.ApiResponseBean;
 import com.aiticketing.bean.response.LoginResponseBean;
@@ -115,16 +116,16 @@ public class UserController {
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponseBean.success(getUsersResp));
 	}
 	
-	@Operation(summary = "Make Agent", description = "Updates role to an AGENT")
+	@Operation(summary = "Make Agent", description = "Updates role to an AGENT with department")
 	@ApiResponses({
         @ApiResponse(responseCode = "200", description = "User updated to Agent"),
         @ApiResponse(responseCode = "401", description = "Unauthorized/ Invalid or expired token"),
         @ApiResponse(responseCode = "403", description = "Forbidden")
 	})
 	@PatchMapping("/admin/update-role/{userId}")
-	public ResponseEntity<ApiResponseBean<UserResponseBean>> updateToAgentByAdmin(@PathVariable Long userId){
+	public ResponseEntity<ApiResponseBean<UserResponseBean>> updateToAgentByAdmin(@PathVariable Long userId, @Valid @RequestBody PromoteToAgentRequestBean toAgentReq){
 		USER_CONTROLLER_LOG.info("UserController :: in updateToAgentByAdmin()");
-		UserResponseBean updateToAgentResp = userService.updateToAgentByAdmin(userId);
+		UserResponseBean updateToAgentResp = userService.updateToAgentByAdmin(userId, toAgentReq);
 		USER_CONTROLLER_LOG.info("UserController :: exit updateToAgentByAdmin()");
 		return ResponseEntity.status(HttpStatus.OK).body(ApiResponseBean.success(updateToAgentResp));
 	}

@@ -6,6 +6,9 @@ import java.time.OffsetDateTime;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.aiticketing.entity.enums.TicketPriority;
+import com.aiticketing.entity.enums.TicketStatus;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -35,12 +38,12 @@ public class Ticket {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     private TicketStatus status;
 	
-	// FK: tickets.ticket_created_by -> users.user_id
+	//FK: tickets.ticket_created_by -> users.user_id
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "ticket_created_by", nullable = false)
     private User createdBy;
 	
-    // FK: tickets.ticket_assigned_to -> users.user_id (nullable)
+    //FK: tickets.ticket_assigned_to -> users.user_id (nullable)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ticket_assigned_to")
     private User assignedTo;
@@ -48,8 +51,9 @@ public class Ticket {
     @Column(name = "ticket_ai_category", length = 80)
     private String aiCategory;
 
-    @Column(name = "ticket_ai_priority", length = 30)
-    private String aiPriority;
+    @Column(name = "ticket_ai_priority", columnDefinition="ticket_priority")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    private TicketPriority aiPriority;
 
     @Column(name = "ticket_created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -66,6 +70,30 @@ public class Ticket {
     @Column(name = "ticket_duplicate_state", nullable = false, length = 20)
     private String duplicateState;
 
+    @Column(name = "ticket_ai_failed", nullable = false)
+    private Boolean aiFailed;
+
+    @Column(name = "ticket_ai_last_error", columnDefinition = "text")
+    private String aiLastError;
+    
+    @Column(name = "ticket_ai_triaged_at")
+    private OffsetDateTime aiTriagedAt;
+
+    @Column(name = "ticket_vague_count", nullable = false)
+    private Integer vagueCount;
+
+    @Column(name = "ticket_last_vague_at")
+    private OffsetDateTime lastVagueAt;
+
+    @Column(name = "ticket_first_assigned_at")
+    private OffsetDateTime firstAssignedAt;
+
+    @Column(name = "ticket_vague_reason", columnDefinition = "text")
+    private String vagueReason;
+
+    @Column(name = "ticket_clarification_prompt", columnDefinition = "text")
+    private String clarificationPrompt;
+    
 	public Long getTicketId() {
 		return ticketId;
 	}
@@ -122,11 +150,11 @@ public class Ticket {
 		this.aiCategory = aiCategory;
 	}
 
-	public String getAiPriority() {
+	public TicketPriority getAiPriority() {
 		return aiPriority;
 	}
 
-	public void setAiPriority(String aiPriority) {
+	public void setAiPriority(TicketPriority aiPriority) {
 		this.aiPriority = aiPriority;
 	}
 
@@ -170,6 +198,70 @@ public class Ticket {
 		this.duplicateState = duplicateState;
 	}
 	
+	public Boolean getAiFailed() {
+		return aiFailed;
+	}
+
+	public void setAiFailed(Boolean aiFailed) {
+		this.aiFailed = aiFailed;
+	}
+
+	public String getAiLastError() {
+		return aiLastError;
+	}
+
+	public void setAiLastError(String aiLastError) {
+		this.aiLastError = aiLastError;
+	}
+
+	public OffsetDateTime getAiTriagedAt() {
+		return aiTriagedAt;
+	}
+
+	public void setAiTriagedAt(OffsetDateTime aiTriagedAt) {
+		this.aiTriagedAt = aiTriagedAt;
+	}
+
+	public Integer getVagueCount() {
+		return vagueCount;
+	}
+
+	public void setVagueCount(Integer vagueCount) {
+		this.vagueCount = vagueCount;
+	}
+
+	public OffsetDateTime getLastVagueAt() {
+		return lastVagueAt;
+	}
+
+	public void setLastVagueAt(OffsetDateTime lastVagueAt) {
+		this.lastVagueAt = lastVagueAt;
+	}
+
+	public OffsetDateTime getFirstAssignedAt() {
+		return firstAssignedAt;
+	}
+
+	public void setFirstAssignedAt(OffsetDateTime firstAssignedAt) {
+		this.firstAssignedAt = firstAssignedAt;
+	}
+
+	public String getVagueReason() {
+		return vagueReason;
+	}
+
+	public void setVagueReason(String vagueReason) {
+		this.vagueReason = vagueReason;
+	}
+
+	public String getClarificationPrompt() {
+		return clarificationPrompt;
+	}
+
+	public void setClarificationPrompt(String clarificationPrompt) {
+		this.clarificationPrompt = clarificationPrompt;
+	}
+
 	@Override
     public String toString() {
         return "Ticket{" +

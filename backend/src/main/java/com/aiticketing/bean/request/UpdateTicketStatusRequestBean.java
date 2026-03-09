@@ -1,6 +1,7 @@
 package com.aiticketing.bean.request;
 
-import com.aiticketing.entity.TicketStatus;
+import com.aiticketing.entity.enums.TicketStatus;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 

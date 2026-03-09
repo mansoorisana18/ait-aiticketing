@@ -1,4 +1,4 @@
-package com.aiticketing.entity;
+package com.aiticketing.entity.enums;
 
 public enum TicketStatus {
 	NEW,

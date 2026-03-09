@@ -1,6 +1,6 @@
 package com.aiticketing.bean.request;
 
-import com.aiticketing.entity.CommentVisibility;
+import com.aiticketing.entity.enums.CommentVisibility;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;

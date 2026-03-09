@@ -6,8 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.aiticketing.entity.CommentVisibility;
 import com.aiticketing.entity.TicketComment;
+import com.aiticketing.entity.enums.CommentVisibility;
 
 public interface TicketCommentRepository extends JpaRepository<TicketComment, Long> {
 

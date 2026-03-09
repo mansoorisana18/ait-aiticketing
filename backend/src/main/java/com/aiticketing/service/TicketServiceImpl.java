@@ -9,33 +9,53 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.aiticketing.ai.Taxonomy;
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
+import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
+import com.aiticketing.bean.response.TicketTextVersionResponseBean;
 import com.aiticketing.bean.response.UserTicketResponseBean;
 import com.aiticketing.entity.AdminOverride;
-import com.aiticketing.entity.CommentVisibility;
+import com.aiticketing.entity.OutboxEvent;
 import com.aiticketing.entity.Ticket;
 import com.aiticketing.entity.TicketComment;
-import com.aiticketing.entity.TicketStatus;
+import com.aiticketing.entity.TicketTextVersion;
 import com.aiticketing.entity.User;
-import com.aiticketing.entity.UserRole;
+import com.aiticketing.entity.enums.AggregateType;
+import com.aiticketing.entity.enums.CommentVisibility;
+import com.aiticketing.entity.enums.OutboxEventType;
+import com.aiticketing.entity.enums.TicketPriority;
+import com.aiticketing.entity.enums.TicketStatus;
+import com.aiticketing.entity.enums.UserRole;
 import com.aiticketing.exception.BadRequestException;
 import com.aiticketing.exception.NotFoundException;
 import com.aiticketing.exception.UnauthorizedException;
 import com.aiticketing.repository.AdminOverrideRepository;
+import com.aiticketing.repository.OutboxEventRepository;
 import com.aiticketing.repository.TicketCommentRepository;
 import com.aiticketing.repository.TicketRepository;
+import com.aiticketing.repository.TicketTextVersionRepository;
 import com.aiticketing.repository.UserRepository;
 import com.aiticketing.utilities.Utility;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service("TicketServiceImpl")
 public class TicketServiceImpl implements TicketService {
 
+	@Autowired
+	TicketTextVersionRepository ticketTextVersionRepo;
+
+	@Autowired
+	OutboxEventRepository outboxEventRepo;
+
+	@Autowired
+	ObjectMapper objectMapper;
+	
 	@Autowired
 	TicketCommentRepository ticketCommentRepo;
 	
@@ -62,6 +82,16 @@ public class TicketServiceImpl implements TicketService {
 		t.setDescription(createTicketReq.description.trim());
 		t.setStatus(TicketStatus.NEW);
 		t.setCreatedBy(creator);
+		
+		//Initial outbox TRIAGE values
+		t.setAiFailed(false);
+		t.setAiLastError(null);
+		t.setAiTriagedAt(null);
+		t.setVagueCount(0);
+		t.setLastVagueAt(null);
+		t.setFirstAssignedAt(null);
+		t.setVagueReason(null);
+		t.setClarificationPrompt(null);
 
 		t.setCurrentTextVersion(1);
 		t.setDuplicateState("NONE");
@@ -72,7 +102,32 @@ public class TicketServiceImpl implements TicketService {
 
 		Ticket savedResp = ticketRepo.save(t);
 
-		// using fetch join
+		//1) Insert in ticket_text_versions snapshot v1
+	    TicketTextVersion tv = new TicketTextVersion();
+	    tv.setTicketId(savedResp.getTicketId());
+	    tv.setVersionNo(1);
+	    tv.setTicketTitle(savedResp.getTitle());
+	    tv.setTicketDescription(savedResp.getDescription());
+	    tv.setCreatedByUserId(creator.getUserId());
+	    tv.setCreatedAt(now);
+	    ticketTextVersionRepo.save(tv);
+
+	    //2)Insert in outbox event table
+	    OutboxEvent oe = new OutboxEvent();
+	    oe.setEventType(OutboxEventType.TRIAGE_REQUESTED.name());
+	    oe.setAggregateType(AggregateType.TICKET.name());
+	    oe.setAggregateId(savedResp.getTicketId());
+	    oe.setStatus("PENDING");
+	    oe.setRetryCount(0);
+	    oe.setCreatedAt(now);
+	    try {
+	        oe.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", 1)));
+	    } catch (Exception e) {
+	        oe.setPayload("{\"textVersion\":1}");
+	    }
+	    outboxEventRepo.save(oe);
+	    
+		//using fetch join for db response
 		Ticket fetchTicket = ticketRepo.findByIdWithUsers(savedResp.getTicketId())
 				.orElseThrow(() -> new NotFoundException("Ticket not found after create"));
 
@@ -248,10 +303,18 @@ public class TicketServiceImpl implements TicketService {
 		    }
 		
 		    case "PRIORITY" -> {
-		        String newValue = (req.newValue == null) ? "" : req.newValue.trim();
-		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for PRIORITY");
-		        ticket.setAiPriority(newValue);
-		        newValueForAudit = newValue;
+		        String newValue = Taxonomy.normalize(req.newValue);
+		        if (newValue == null || newValue.isBlank()) throw new BadRequestException("newValue is required for PRIORITY");
+		        
+		        TicketPriority p;
+		        try {
+		            p = TicketPriority.valueOf(newValue);
+		        } catch (IllegalArgumentException ex) {
+		            throw new BadRequestException("Invalid priority. Allowed: LOW, MEDIUM, HIGH, URGENT");
+		        }
+
+		        ticket.setAiPriority(p);
+		        newValueForAudit = p.name();		    
 		    }
 		
 		    case "DUPLICATE_LINK" -> {
@@ -354,7 +417,7 @@ public class TicketServiceImpl implements TicketService {
 	    return switch (type) {
 	        case "STATUS" -> ticket.getStatus() != null ? ticket.getStatus().name() : null;
 	        case "CATEGORY" -> ticket.getAiCategory();
-	        case "PRIORITY" -> ticket.getAiPriority();
+	        case "PRIORITY" -> ticket.getAiPriority()!= null ? ticket.getAiPriority().name() : null;
 	        case "DUPLICATE_LINK" -> ticket.getDuplicateState();
 	        case "ASSIGNMENT" -> ticket.getAssignedTo() != null ? String.valueOf(ticket.getAssignedTo().getUserId()) : null;
 	        default -> null;
@@ -420,10 +483,13 @@ public class TicketServiceImpl implements TicketService {
 		if (t.getAssignedTo() != null) {
 			r.assignedToName = t.getAssignedTo().getUsername();
 		}
+		
+		r.vagueReason = t.getVagueReason();
+		r.clarificationPrompt =t.getClarificationPrompt();
 
 		TICKET_SERVICE_LOG.info(
-				"TicketServiceImpl :: exit setUserTicketResponseBean() :: ticketId={}, userTicketStatus={}, assignedToName={}",
-				r.ticketId, r.userTicketStatus, r.assignedToName);
+				"TicketServiceImpl :: exit setUserTicketResponseBean() :: ticketId={}, userTicketStatus={}, assignedToName={}, vagueReason={}",
+				r.ticketId, r.userTicketStatus, r.assignedToName, r.vagueReason);
 		return r;
 	}
 
@@ -452,6 +518,16 @@ public class TicketServiceImpl implements TicketService {
 		r.aiCategory = t.getAiCategory();
 		r.aiPriority = t.getAiPriority();
 		r.aiConfidence = t.getAiConfidence();
+		
+		r.aiFailed = t.getAiFailed();
+		r.aiLastError = t.getAiLastError();
+		r.aiTriagedAt = t.getAiTriagedAt();
+		r.vagueCount = t.getVagueCount();
+		r.lastVagueAt = t.getLastVagueAt();
+		r.firstAssignedAt = t.getFirstAssignedAt();
+		r.vagueReason = t.getVagueReason();
+		r.clarificationPrompt = t.getClarificationPrompt();
+		
 		r.currentTextVersion = t.getCurrentTextVersion();
 		r.duplicateState = t.getDuplicateState();
 
@@ -468,4 +544,118 @@ public class TicketServiceImpl implements TicketService {
 		return r;
 	}
 
+	@Transactional
+	public UserTicketResponseBean clarifyVagueTicket(Long userId, Long ticketId, UpdateVagueTicketRequestBean req) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in clarifyVagueTicket() :: userId={} ticketId={}", userId, ticketId);
+
+	    Ticket ticket = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    if (ticket.getCreatedBy() == null || !ticket.getCreatedBy().getUserId().equals(userId)) {
+	        throw new UnauthorizedException("You are not allowed to update this ticket");
+	    }
+
+	    if (ticket.getStatus() != TicketStatus.VAGUE) {
+	        throw new BadRequestException("Only vague tickets can be clarified through this endpoint");
+	    }
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    //Optional title update
+	    String updatedTitle = (req.title == null || req.title.trim().isBlank())
+	            ? ticket.getTitle()
+	            : req.title.trim();
+
+	    String oldDescription = ticket.getDescription() == null ? "" : ticket.getDescription().trim();
+	    String clarificationAnswer = req.clarificationAnswer.trim();
+
+	    //Visible latest description stored in ticket + version table.
+	    //adding new line before appending each clarification answer to keep it readable for user/admin, LLM flattening happens later in AiTriageService.safe().
+	    String updatedDescription;
+	    if (oldDescription.isBlank()) {
+	        updatedDescription = clarificationAnswer;
+	    } else {
+	        updatedDescription = oldDescription + "\n\n" + clarificationAnswer;
+	    }
+
+	    ticket.setTitle(updatedTitle);
+	    ticket.setDescription(updatedDescription);
+	    ticket.setCurrentTextVersion(ticket.getCurrentTextVersion() + 1);
+	    ticket.setStatus(TicketStatus.NEW); // waiting for re-triage
+	    ticket.setUpdatedAt(now);
+
+	    //Clear current vague guidance so stale prompt is not shown
+	    ticket.setVagueReason(null);
+	    ticket.setClarificationPrompt(null);
+	    ticket.setAiLastError(null);
+	    ticket.setAiFailed(false);
+
+	    Ticket saved = ticketRepo.save(ticket);
+
+	    //insert new text version snapshot
+	    TicketTextVersion tv = new TicketTextVersion();
+	    tv.setTicketId(saved.getTicketId());
+	    tv.setVersionNo(saved.getCurrentTextVersion());
+	    tv.setTicketTitle(saved.getTitle());
+	    tv.setTicketDescription(saved.getDescription());
+	    tv.setCreatedByUserId(userId);
+	    tv.setCreatedAt(now);
+	    ticketTextVersionRepo.save(tv);
+
+	    //enqueue fresh triage request
+	    OutboxEvent oe = new OutboxEvent();
+	    oe.setEventType("TRIAGE_REQUESTED");
+	    oe.setAggregateType("TICKET");
+	    oe.setAggregateId(saved.getTicketId());
+	    oe.setStatus("PENDING");
+	    oe.setRetryCount(0);
+	    oe.setCreatedAt(now);
+
+	    try {
+	        oe.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", saved.getCurrentTextVersion())));
+	    } catch (Exception e) {
+	        oe.setPayload("{\"textVersion\":" + saved.getCurrentTextVersion() + "}");
+	    }
+
+	    outboxEventRepo.save(oe);
+
+	    Ticket refreshed = ticketRepo.findByIdWithUsers(saved.getTicketId())
+	            .orElseThrow(() -> new NotFoundException("Ticket not found after update"));
+
+	    UserTicketResponseBean resp = setUserTicketResponseBean(refreshed);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit clarifyVagueTicket() :: ticketId={} version={}",
+	            resp.ticketId, refreshed.getCurrentTextVersion());
+
+	    return resp;
+	}
+
+	@Transactional(readOnly = true)
+	public List<TicketTextVersionResponseBean> getTicketHistory(Long ticketId) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in getTicketHistory() :: ticketId={}", ticketId);
+
+	    ticketRepo.findById(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    List<TicketTextVersionResponseBean> resp = ticketTextVersionRepo
+	            .findByTicketIdOrderByVersionNoDesc(ticketId)
+	            .stream()
+	            .map(this::mapToTicketTextVersionResp)
+	            .toList();
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit getTicketHistory() :: count={}", resp.size());
+	    return resp;
+	}
+	
+	private TicketTextVersionResponseBean mapToTicketTextVersionResp(TicketTextVersion ttv) {
+	    TicketTextVersionResponseBean r = new TicketTextVersionResponseBean();
+	    r.versionId = ttv.getVersionId();
+	    r.ticketId = ttv.getTicketId();
+	    r.versionNo = ttv.getVersionNo();
+	    r.title = ttv.getTicketTitle();
+	    r.description = ttv.getTicketDescription();
+	    r.createdByUserId = ttv.getCreatedByUserId();
+	    r.createdAt = ttv.getCreatedAt();
+	    return r;
+	}
 }
