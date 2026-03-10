@@ -21,15 +21,15 @@ export default function LoginPage() {
   const [snack, setSnack] = useState({ open: false, message: "" });
 
   React.useEffect(() => {
-  const unsub = subscribeSessionExpired(() => {
-    setSnack({
-      open: true,
-      message: "Session expired. Please login again.",
+    const unsub = subscribeSessionExpired(() => {
+      setSnack({
+        open: true,
+        message: "Session expired. Please login again.",
+      });
     });
-  });
 
-  return unsub;
-}, []);
+    return unsub;
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

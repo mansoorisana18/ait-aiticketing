@@ -16,6 +16,23 @@ export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 export type UserRole = "USER" | "AGENT" | "ADMIN";
 
+export type Department =
+  | "TECHNICAL SUPPORT"
+  | "BILLING AND PAYMENTS"
+  | "ORDERS AND RETURNS"
+  | "SALES AND PRESALES"
+  | "ACCOUNT AND ACCESS"
+  | "GENERAL INQUIRY";
+
+export const DEPARTMENTS: Department[] = [
+  "TECHNICAL SUPPORT",
+  "BILLING AND PAYMENTS",
+  "ORDERS AND RETURNS",
+  "SALES AND PRESALES",
+  "ACCOUNT AND ACCESS",
+  "GENERAL INQUIRY",
+];
+
 export type TicketStatus =
   | "NEW"
   | "AI_PROCESSING"
@@ -49,6 +66,7 @@ export type UserResponseBean = {
   email: string;
   name: string;
   role: UserRole;
+  department?: Department | null;
 };
 
 //USER view ticket bean - only includes fields relevant to the user
@@ -63,6 +81,10 @@ export type UserTicketResponseBean = {
   createdByName?: string;
   createdByEmail?: string;
   assignedToName?: string | null;
+
+  //for vague indication on user side
+  vagueReason?: string | null;
+  clarificationPrompt?: string | null;
 };
 
 //ADMIN/AGENT view ticket bean - includes all fields, including those relevant to the agent/admin
@@ -77,6 +99,17 @@ export type TicketResponseBean = {
   aiConfidence?: string | number | null;
   currentTextVersion?: number | null;
   duplicateState?: DuplicateState | string | null;
+
+  //AI: TRAIGE & ROUTING detail fields
+  aiFailed?: boolean | null; //only for TRIAGE
+  aiLastError?: string | null;
+  aiTriagedAt?: string | null;
+  vagueCount?: number | null; //no of times ticket has been marked as vague, used for both agent/admin and user view
+  lastVagueAt?: string | null;
+  firstAssignedAt?: string | null; //metrics field for dashboard
+  vagueReason?: string | null;
+  clarificationPrompt?: string | null;
+
   createdAt?: string | null;
   updatedAt?: string | null;
   createdByUserId: number;
@@ -131,3 +164,25 @@ export type AdminOverrideResponseBean = {
 export type UpdateTicketStatusRequestBean = {
   status: "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 };
+
+//update user to agent request bean
+export type PromoteToAgentRequestBean = {
+  department: Department;
+};
+
+//Request bean for updating vague ticket with user clarification
+export type UpdateVagueTicketRequestBean = {
+  title?: string;
+  clarificationAnswer: string;
+};
+
+//for vague history
+export type TicketTextVersionResponseBean = {
+  versionId: number;
+  ticketId: number;
+  versionNo: number;
+  title: string;
+  description: string;
+  createdByUserId: number;
+  createdAt?: string | null;
+}

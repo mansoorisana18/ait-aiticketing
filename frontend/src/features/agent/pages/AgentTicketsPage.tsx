@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert, Paper, Stack, Typography } from "@mui/material";
+import { Stack, Typography } from "@mui/material";
 import { useAuth } from "../../../state/AuthContext";
 import LoadingSkeleton from "../../../components/LoadingSkeleton";
 import TicketTable from "../../tickets/components/TicketTable";

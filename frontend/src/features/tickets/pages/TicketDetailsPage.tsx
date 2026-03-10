@@ -1,17 +1,31 @@
 import React from "react";
 import { useParams } from "react-router-dom";
-import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Chip, Divider, MenuItem, Paper, Stack, TextField, Typography, } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 
 import { useAuth } from "../../../state/AuthContext";
 import LoadingSkeleton from "../../../components/LoadingSkeleton";
 import { statusChipSx } from "../components/statusColors";
 import AiAutomationPanel from "../components/AiAutomationPanel";
+import TicketDetailsComments from "../components/TicketDetailsComments";
+import TicketTextHistoryPanel from "../components/TicketTextHistoryPanel";
+import VagueClarificationPanel from "../components/VagueClarificationPanel";
 import { formatDateTime } from "../../../utils/dateTime";
 
 import type {
   AdminOverrideRequestBean,
   AdminOverrideType,
+  Department,
   TicketResponseBean,
   TicketStatus,
   UpdateTicketStatusRequestBean,
@@ -21,13 +35,12 @@ import type {
 import {
   useAdminOverride,
   useAgentUpdateStatus,
+  useClarifyVagueTicket,
   useTicketDetailsInternal,
   useTicketDetailsUser,
+  useTicketTextVersionHistory,
 } from "../hooks";
 
-import TicketDetailsComments from "../components/TicketDetailsComments";
-
-// ---- Dropdown options ----
 const INTERNAL_STATUS_OPTIONS: TicketStatus[] = [
   "NEW",
   "AI_PROCESSING",
@@ -39,11 +52,22 @@ const INTERNAL_STATUS_OPTIONS: TicketStatus[] = [
   "CLOSED",
 ];
 
-const AGENT_STATUS_OPTIONS: UpdateTicketStatusRequestBean["status"][] = ["IN_PROGRESS", "RESOLVED", "CLOSED"];
+const AGENT_STATUS_OPTIONS: UpdateTicketStatusRequestBean["status"][] = [
+  "IN_PROGRESS",
+  "RESOLVED",
+  "CLOSED",
+];
 
-const OVERRIDE_TYPES: AdminOverrideType[] = ["STATUS", "CATEGORY", "PRIORITY", "DUPLICATE_LINK", "KB_DRAFT", "ASSIGNMENT"];
+const OVERRIDE_TYPES: AdminOverrideType[] = [
+  "STATUS",
+  "CATEGORY",
+  "PRIORITY",
+  "DUPLICATE_LINK",
+  "KB_DRAFT",
+  "ASSIGNMENT",
+];
 
-const CATEGORY_OPTIONS = [
+const CATEGORY_OPTIONS: Department[] = [
   "TECHNICAL SUPPORT",
   "BILLING AND PAYMENTS",
   "ORDERS AND RETURNS",
@@ -70,31 +94,34 @@ export default function TicketDetailsPage() {
   const isAgent = auth.role === "AGENT";
   const isAdmin = auth.role === "ADMIN";
 
-  const userQuery = useTicketDetailsUser(idNum, isUser);
-  const internalQuery = useTicketDetailsInternal(idNum, !isUser);
+  const userQuery = useTicketDetailsUser(idNum, Boolean(isUser && auth.token));
+  const internalQuery = useTicketDetailsInternal(idNum, Boolean(!isUser && auth.token));
 
   const isLoading = isUser ? userQuery.isLoading : internalQuery.isLoading;
 
   const userTicket = userQuery.data as UserTicketResponseBean | undefined;
   const internalTicket = internalQuery.data as TicketResponseBean | undefined;
 
-  // ---- Agent status update form ----
+  const clarifyMutation = useClarifyVagueTicket(idNum ?? -1);
+
   const agentUpdate = useAgentUpdateStatus(idNum ?? -1);
-  const [agentStatus, setAgentStatus] = React.useState<UpdateTicketStatusRequestBean["status"]>("IN_PROGRESS");
+  const [agentStatus, setAgentStatus] =
+    React.useState<UpdateTicketStatusRequestBean["status"]>("IN_PROGRESS");
 
-
-  // ---- Admin override form ----
   const adminOverride = useAdminOverride(idNum ?? -1);
   const [overrideType, setOverrideType] = React.useState<AdminOverrideType>("STATUS");
   const [newValue, setNewValue] = React.useState<string>("");
   const [newAssignedToUserId, setNewAssignedToUserId] = React.useState<number | null>(null);
   const [reason, setReason] = React.useState<string>("");
 
-  // Initialize sensible defaults from ticket when it loads
+  const textHistoryQuery = useTicketTextVersionHistory(
+    idNum,
+    Boolean(idNum && auth.token && (isAdmin || isAgent))
+  );
+
   React.useEffect(() => {
     if (!internalTicket) return;
 
-    // agent default status = current status if allowed; else IN_PROGRESS
     if (isAgent) {
       const current = internalTicket.status;
       if (current === "IN_PROGRESS" || current === "RESOLVED" || current === "CLOSED") {
@@ -104,7 +131,6 @@ export default function TicketDetailsPage() {
       }
     }
 
-    // admin override default newValue based on type
     if (isAdmin) {
       if (overrideType === "STATUS") setNewValue(internalTicket.status);
       if (overrideType === "CATEGORY") setNewValue(internalTicket.aiCategory ?? "");
@@ -131,6 +157,12 @@ export default function TicketDetailsPage() {
     internalTicket!.assignedToUserId != null &&
     internalTicket!.assignedToUserId === auth.userId;
 
+  const showClarification =
+    isUser &&
+    !!userTicket &&
+    (userTicket.userTicketStatus?.toUpperCase() === "WAITING FOR YOUR INPUT" ||
+      Boolean(userTicket.clarificationPrompt));
+
   const submitAgentStatus = async () => {
     if (!canAgentUpdate || !idNum) return;
     await agentUpdate.mutateAsync({ status: agentStatus });
@@ -145,7 +177,7 @@ export default function TicketDetailsPage() {
     };
 
     if (overrideType === "ASSIGNMENT") {
-      payload.newAssignedToUserId = newAssignedToUserId ?? null; // null = unassign
+      payload.newAssignedToUserId = newAssignedToUserId ?? null;
     } else {
       payload.newValue = newValue.trim() || "";
     }
@@ -162,7 +194,7 @@ export default function TicketDetailsPage() {
           type="number"
           value={newAssignedToUserId ?? ""}
           onChange={(e) => setNewAssignedToUserId(e.target.value === "" ? null : Number(e.target.value))}
-          helperText="Later we can replace this with an Agents dropdown."
+          helperText="Later this can be replaced by an agents dropdown filtered by department."
         />
       );
     }
@@ -207,12 +239,7 @@ export default function TicketDetailsPage() {
 
     if (overrideType === "DUPLICATE_LINK") {
       return (
-        <TextField
-          select
-          label="New Duplicate State"
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-        >
+        <TextField select label="New Duplicate State" value={newValue} onChange={(e) => setNewValue(e.target.value)}>
           <MenuItem value="">—</MenuItem>
           {DUPLICATE_STATE_OPTIONS.map((d) => (
             <MenuItem key={d} value={d}>
@@ -223,7 +250,6 @@ export default function TicketDetailsPage() {
       );
     }
 
-    // KB_DRAFT: free text
     return (
       <TextField
         label="New Value"
@@ -237,97 +263,125 @@ export default function TicketDetailsPage() {
 
   return (
     <Stack spacing={2} sx={{ width: "100%" }}>
-      {/* -------------------- Band 1: Overview -------------------- */}
+      {/* Band 1 */}
       <Paper variant="outlined" sx={{ ...CARD_SX, p: 2.5 }}>
         <Stack spacing={2}>
-          {/* Title row */}
           <Stack
             direction={{ xs: "column", md: "row" }}
             justifyContent="space-between"
             alignItems={{ xs: "flex-start", md: "center" }}
             spacing={1.25}
           >
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 1000 }}>
-              {headerTitle}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Ticket #{headerId}
-            </Typography>
-          </Box>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 1000 }}>
+                {headerTitle}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Ticket #{headerId}
+              </Typography>
+            </Box>
 
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Chip label={`User: ${userStatus}`} size="small" sx={{ ...statusChipSx(userStatus), fontWeight: 700 }} />
-            {!isUser && <Chip label={`Internal: ${internalStatus}`} size="small" sx={{ ...statusChipSx(internalStatus), fontWeight: 700 }} />}
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Chip label={`User: ${userStatus}`} size="small" sx={{ ...statusChipSx(userStatus), fontWeight: 700 }} />
+              {!isUser && (
+                <Chip
+                  label={`Internal: ${internalStatus}`}
+                  size="small"
+                  sx={{ ...statusChipSx(internalStatus), fontWeight: 700 }}
+                />
+              )}
+            </Stack>
           </Stack>
-        </Stack>
 
-        <Divider />
+          <Divider />
 
-        {/* Content row: Description (left) + Details (right) */}
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1.6fr 1fr" },
-            gap: 2,
-            alignItems: "stretch",
-          }}
-        >
-          {/* LEFT: Description */}
-          <Paper variant="outlined" sx={CARD_SX}>
-            <Typography sx={{ fontWeight: 1000, mb: 0.75 }}>Description</Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "1.6fr 1fr" },
+              gap: 2,
+              alignItems: "stretch",
+            }}
+          >
+            <Paper variant="outlined" sx={CARD_SX}>
+              <Typography sx={{ fontWeight: 1000, mb: 0.75 }}>Description</Typography>
 
-            <Typography sx={{ whiteSpace: "pre-wrap" }}>
-              {(isUser ? userTicket!.description : internalTicket!.description) ?? ""}
-            </Typography>
-          </Paper>
-
-          {/* RIGHT: Details (Created/Updated + CreatedBy + Assigned) */}
-          <Paper variant="outlined" sx={CARD_SX}>
-            <Typography sx={{ fontWeight: 1000, mb: 0.75 }}>Details</Typography>
-
-            <Stack spacing={1}>
-              <Typography variant="body2" color="text.secondary">
-                Created: {formatDateTime(isUser ? userTicket!.createdAt : internalTicket!.createdAt)}
+              <Typography sx={{ whiteSpace: "pre-wrap" }}>
+                {(isUser ? userTicket!.description : internalTicket!.description) ?? ""}
               </Typography>
 
-              <Typography variant="body2" color="text.secondary">
-                Updated: {formatDateTime(isUser ? userTicket!.updatedAt : internalTicket!.updatedAt)}
-              </Typography>
+              {showClarification && (
+                <Box sx={{ mt: 2 }}>
+                  <VagueClarificationPanel
+                    ticket={userTicket!}
+                    isSubmitting={clarifyMutation.isPending}
+                    onSubmit={async (body) => {
+                      await clarifyMutation.mutateAsync(body);
+                    }}
+                  />
+                </Box>
+              )}
+            </Paper>
 
-              <Divider sx={{ my: 0.5 }} />
+            <Paper variant="outlined" sx={CARD_SX}>
+              <Typography sx={{ fontWeight: 1000, mb: 0.75 }}>Details</Typography>
 
-              {/* Created by (shown to USER too) */}
-              <Typography variant="body2" sx={{ fontWeight: 900 }}>
-                Created by: {isUser ? userTicket!.createdByName : internalTicket!.createdByName}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {isUser ? userTicket!.createdByEmail : internalTicket!.createdByEmail}
-              </Typography>
-
-              <Divider sx={{ my: 0.5 }} />
-
-              {/* Assigned: on the same line */}
-              <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
-                <Typography variant="body2" sx={{ fontWeight: 1000 }}>
-                  Assigned:
+              <Stack spacing={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Created: {formatDateTime(isUser ? userTicket!.createdAt : internalTicket!.createdAt)}
                 </Typography>
+
+                <Typography variant="body2" color="text.secondary">
+                  Updated: {formatDateTime(isUser ? userTicket!.updatedAt : internalTicket!.updatedAt)}
+                </Typography>
+
+                <Divider sx={{ my: 0.5 }} />
 
                 <Typography variant="body2" sx={{ fontWeight: 900 }}>
-                  {isUser ? userTicket!.assignedToName ?? "Unassigned" : internalTicket!.assignedToName ?? "Unassigned"}
+                  Created by: {isUser ? userTicket!.createdByName : internalTicket!.createdByName}
                 </Typography>
-              </Stack>
-
-              {/* Assigned email visible to USER too */}
-              {!isUser ? (
                 <Typography variant="body2" color="text.secondary">
-                  {internalTicket!.assignedToEmail ?? ""}
+                  {isUser ? userTicket!.createdByEmail : internalTicket!.createdByEmail}
                 </Typography>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    {/* If the UserTicketResponseBean does not include assignedToEmail, this will be blank. */}
-                    {(userTicket as any).assignedToEmail ?? ""}
+
+                <Divider sx={{ my: 0.5 }} />
+
+                <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
+                  <Typography variant="body2" sx={{ fontWeight: 1000 }}>
+                    Assigned:
                   </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                    {isUser ? userTicket!.assignedToName ?? "Unassigned" : internalTicket!.assignedToName ?? "Unassigned"}
+                  </Typography>
+                </Stack>
+
+                {!isUser && (
+                  <Typography variant="body2" color="text.secondary">
+                    {internalTicket!.assignedToEmail ?? ""}
+                  </Typography>
+                )}
+
+                {(isUser ? userTicket!.vagueReason : internalTicket!.vagueReason) && (
+                  <>
+                    <Divider sx={{ my: 0.5 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                      Vague Reason
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {isUser ? userTicket!.vagueReason : internalTicket!.vagueReason}
+                    </Typography>
+                  </>
+                )}
+
+                {(isUser ? userTicket!.clarificationPrompt : internalTicket!.clarificationPrompt) && (
+                  <>
+                    <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                      Clarification Prompt
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {isUser ? userTicket!.clarificationPrompt : internalTicket!.clarificationPrompt}
+                    </Typography>
+                  </>
                 )}
               </Stack>
             </Paper>
@@ -335,8 +389,7 @@ export default function TicketDetailsPage() {
         </Stack>
       </Paper>
 
-      {/* -------------------- Band 2: AI + Role actions -------------------- */}
-      {/* Show Band 2 ONLY for internal roles */}
+      {/* Band 2 */}
       {!isUser && internalTicket && (
         <Box
           sx={{
@@ -346,12 +399,10 @@ export default function TicketDetailsPage() {
             alignItems: "stretch",
           }}
         >
-          {/* Left: AI Automation */}
           <Box sx={{ minWidth: 0 }}>
             <AiAutomationPanel ticket={internalTicket} />
           </Box>
 
-          {/* Right: ADMIN override OR AGENT status update */}
           <Box sx={{ minWidth: 0 }}>
             {isAdmin ? (
               <Paper variant="outlined" sx={{ ...CARD_SX, p: 2.5 }}>
@@ -388,7 +439,7 @@ export default function TicketDetailsPage() {
                   />
 
                   <Button variant="contained" onClick={submitAdminOverride} disabled={adminOverride.isPending}>
-                    {adminOverride.isPending ? "Applying…" : "Apply Override"}
+                    {adminOverride.isPending ? "Applying..." : "Apply Override"}
                   </Button>
 
                   {adminOverride.isError && <Alert severity="error">Failed to apply override.</Alert>}
@@ -396,7 +447,6 @@ export default function TicketDetailsPage() {
                 </Stack>
               </Paper>
             ) : (
-              // AGENT ONLY (no admin override text shown to user/admin? -> only agent panel here)
               <Paper variant="outlined" sx={{ ...CARD_SX, p: 2.5 }}>
                 <Typography sx={{ fontWeight: 1000, mb: 1 }}>Update Status</Typography>
 
@@ -418,7 +468,7 @@ export default function TicketDetailsPage() {
                     </TextField>
 
                     <Button variant="contained" onClick={submitAgentStatus} disabled={agentUpdate.isPending}>
-                      {agentUpdate.isPending ? "Updating…" : "Update Status"}
+                      {agentUpdate.isPending ? "Updating..." : "Update Status"}
                     </Button>
 
                     {agentUpdate.isError && <Alert severity="error">Failed to update status.</Alert>}
@@ -431,10 +481,21 @@ export default function TicketDetailsPage() {
         </Box>
       )}
 
-      {/* -------------------- Band 3: Comments -------------------- */}
+      {/* Band 3 */}
       <Box sx={{ width: "100%" }}>
         <TicketDetailsComments ticketId={idNum} role={auth.role ?? "USER"} />
       </Box>
+
+      {/* Band 4 */}
+      {!isUser && (
+        <Box sx={{ width: "100%" }}>
+          {textHistoryQuery.isLoading ? (
+            <LoadingSkeleton variant="list" count={3} />
+          ) : (
+            <TicketTextHistoryPanel versions={textHistoryQuery.data ?? []} />
+          )}
+        </Box>
+      )}
     </Stack>
   );
 }

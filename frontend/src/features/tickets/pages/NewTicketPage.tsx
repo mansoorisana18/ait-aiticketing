@@ -21,7 +21,7 @@ export default function NewTicketPage() {
       nav(`/tickets/${created.ticketId}`);
     } catch (e) {
       const ne = normalizeApiError(e);
-      if (ne.kind === "validation") setFieldErrors(ne.fieldErrors);
+      if (ne.kind === "validation") setFieldErrors(ne.fieldErrors ?? {});
       else setSnack({ open: true, message: ne.message });
     }
   };
@@ -30,12 +30,23 @@ export default function NewTicketPage() {
     <>
       <Paper variant="outlined" sx={{ p: 3, maxWidth: 720 }}>
         <Stack spacing={2}>
-          <Typography variant="h5">Create Ticket</Typography>
-          <TicketForm onSubmit={onSubmit} fieldErrors={fieldErrors} isSubmitting={createTicket.isPending} />
+          <Typography variant="h5" sx={{ fontWeight: 900 }}>
+            Create Ticket
+          </Typography>
+
+          <TicketForm
+            onSubmit={onSubmit}
+            fieldErrors={fieldErrors}
+            isSubmitting={createTicket.isPending}
+          />
         </Stack>
       </Paper>
 
-      <GlobalSnackbar open={snack.open} message={snack.message} onClose={() => setSnack({ open: false, message: "" })} />
+      <GlobalSnackbar
+        open={snack.open}
+        message={snack.message}
+        onClose={() => setSnack({ open: false, message: "" })}
+      />
     </>
   );
 }

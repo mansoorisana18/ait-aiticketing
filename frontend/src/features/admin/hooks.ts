@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { UserResponseBean } from "../../api/types";
+import type { PromoteToAgentRequestBean, UserResponseBean } from "../../api/types";
 import { fetchUsersForAdmin, updateToAgentByAdmin } from "./api";
 
 export function useUsersForAdmin(enabled = true) {
@@ -14,8 +14,8 @@ export function useUsersForAdmin(enabled = true) {
 export function useMakeAgentByAdmin() {
   const qc = useQueryClient();
 
-  return useMutation<UserResponseBean, unknown, number>({
-    mutationFn: (userId) => updateToAgentByAdmin(userId),
+  return useMutation<UserResponseBean, unknown, { userId: number; body: PromoteToAgentRequestBean }>({
+    mutationFn: ({ userId, body }) => updateToAgentByAdmin(userId, body),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "users"] });
     },

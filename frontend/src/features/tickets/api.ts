@@ -1,10 +1,10 @@
 import { axiosClient } from "../../api/axiosClient";
-import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean } from "../../api/types";
+import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean } from "../../api/types";
 
 export type CreateTicketRequest = { title: string; description: string };
 
-export async function createTicketApi(body: CreateTicketRequest): Promise<TicketResponseBean> {
-  const res = await axiosClient.post<TicketResponseBean>("/api/tickets", body);
+export async function createTicketApi(body: CreateTicketRequest): Promise<UserTicketResponseBean> {
+  const res = await axiosClient.post<UserTicketResponseBean>("/api/tickets", body);
   return res.data;
 }
 
@@ -16,6 +16,15 @@ export async function fetchTicketsForUser(): Promise<UserTicketResponseBean[]> {
 
 export async function fetchTicketByIdForUser(ticketId: number): Promise<UserTicketResponseBean> {
   const res = await axiosClient.get<UserTicketResponseBean>(`/api/tickets/user/${ticketId}`);
+  return res.data;
+}
+
+//CLARIFY VAGUE TICKET BY USER
+export async function clarifyVagueTicket(
+  ticketId: number,
+  body: UpdateVagueTicketRequestBean
+): Promise<UserTicketResponseBean> {
+  const res = await axiosClient.patch<UserTicketResponseBean>(`/api/tickets/user/${ticketId}/clarify`, body);
   return res.data;
 }
 
@@ -64,5 +73,15 @@ export async function updateTicketStatusByAgent(
   body: UpdateTicketStatusRequestBean
 ): Promise<TicketResponseBean> {
   const res = await axiosClient.patch<TicketResponseBean>(`/api/tickets/${ticketId}/agent/status`, body);
+  return res.data;
+}
+
+//VAGUE TICKET TEXT HISTORY
+export async function fetchTicketTextVersionHistory(
+  ticketId: number
+): Promise<TicketTextVersionResponseBean[]> {
+  const res = await axiosClient.get<TicketTextVersionResponseBean[]>(
+    `/api/tickets/${ticketId}/text-version-history`
+  );
   return res.data;
 }

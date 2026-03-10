@@ -5,12 +5,10 @@ import FormTextField from "../../../components/FormTextField";
 import GlobalSnackbar from "../../../components/GlobalSnackbar";
 import { useRegister } from "../hooks";
 import { normalizeApiError } from "../../../api/errorNormalizer";
-import { useAuth } from "../../../state/AuthContext";
 import logo from "../../../assets/Logo_AiT.png";
 
 export default function RegisterPage() {
   const nav = useNavigate();
-  const { loginSuccess } = useAuth();
   const register = useRegister();
 
   const [email, setEmail] = useState("");
@@ -18,62 +16,97 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [snack, setSnack] = useState({ open: false, message: "" });
+  const [snack, setSnack] = useState<{
+    open: boolean;
+    message: string;
+    severity?: "success" | "error";
+  }>({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
-    try {
-      const resp = await register.mutateAsync({ email, name, password });
 
-      loginSuccess({
-        userId: resp.userId,
-        name: resp.name,
-        email: resp.email,
-        role: resp.role ?? "USER",
-        sessionToken: resp.sessionToken ?? null,
+    try {
+      await register.mutateAsync({ email, name, password });
+
+      setSnack({
+        open: true,
+        message: "Registration successful. Redirecting to login...",
+        severity: "success",
       });
 
-      nav("/tickets");
+      setTimeout(() => {
+        nav("/login");
+      }, 1200);
     } catch (err) {
       const ne = normalizeApiError(err);
-      if (ne.kind === "validation") setFieldErrors(ne.fieldErrors ?? {});
-      else setSnack({ open: true, message: ne.message });
+      if (ne.kind === "validation") {
+        setFieldErrors(ne.fieldErrors ?? {});
+      } else {
+        setSnack({
+          open: true,
+          message: ne.message,
+          severity: "error",
+        });
+      }
     }
   };
 
   return (
     <>
-     <Box
+      <Box
         sx={{
           minHeight: "30vh",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          mt: 4
+          mt: 4,
         }}
       >
         <Box
           component="img"
           src={logo}
           alt="Logo"
-          sx={{ width: 300, mb: 2, borderRadius: 2}}
+          sx={{ width: 300, mb: 2, borderRadius: 2 }}
         />
-        <Typography variant="h2" fontWeight="bold" alignSelf={"center"}>
+        <Typography variant="h2" fontWeight="bold" alignSelf="center">
           AI- Powered Automated Ticket Management Platform
         </Typography>
-        {/* <Typography variant="h4" fontWeight="bold">
-          Register to Your Account
-        </Typography> */}
       </Box>
+
       <Paper variant="outlined" sx={{ p: 3, maxWidth: 520, mx: "auto", mt: 4 }}>
         <Stack spacing={2} component="form" onSubmit={onSubmit}>
           <Typography variant="h5">Register</Typography>
 
-          <FormTextField name="email" label="Email" value={email} onChange={(e) => setEmail((e.target as HTMLInputElement).value)} fieldErrors={fieldErrors} />
-          <FormTextField name="name" label="Name" value={name} onChange={(e) => setName((e.target as HTMLInputElement).value)} fieldErrors={fieldErrors} />
-          <FormTextField name="password" label="Password" type="password" value={password} onChange={(e) => setPassword((e.target as HTMLInputElement).value)} fieldErrors={fieldErrors} />
+          <FormTextField
+            name="email"
+            label="Email"
+            value={email}
+            onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
+            fieldErrors={fieldErrors}
+          />
+
+          <FormTextField
+            name="name"
+            label="Name"
+            value={name}
+            onChange={(e) => setName((e.target as HTMLInputElement).value)}
+            fieldErrors={fieldErrors}
+          />
+
+          <FormTextField
+            name="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
+            fieldErrors={fieldErrors}
+          />
 
           <Button type="submit" variant="contained" disabled={register.isPending}>
             Create Account
@@ -85,7 +118,12 @@ export default function RegisterPage() {
         </Stack>
       </Paper>
 
-      <GlobalSnackbar open={snack.open} message={snack.message} onClose={() => setSnack({ open: false, message: "" })} />
+      <GlobalSnackbar
+        open={snack.open}
+        message={snack.message}
+        severity={snack.severity}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+      />
     </>
   );
 }

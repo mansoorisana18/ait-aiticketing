@@ -1,15 +1,38 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean } from "../../api/types";
-import { fetchTicketsForAgent, fetchAllTicketsAdmin, createTicketApi, fetchTicketByIdForUser, fetchTicketByIdInternal, fetchTicketsForUser, 
-  createTicketComment, fetchTicketComments, adminOverrideTicket, updateTicketStatusByAgent, type CreateTicketRequest } from "./api";
+import type {
+  TicketResponseBean,
+  UserTicketResponseBean,
+  AdminOverrideRequestBean,
+  AdminOverrideResponseBean,
+  TicketCommentRequestBean,
+  TicketCommentResponseBean,
+  UpdateTicketStatusRequestBean,
+  UpdateVagueTicketRequestBean,
+  TicketTextVersionResponseBean,
+} from "../../api/types";
+import {
+  fetchTicketsForAgent,
+  fetchAllTicketsAdmin,
+  createTicketApi,
+  fetchTicketByIdForUser,
+  fetchTicketByIdInternal,
+  fetchTicketsForUser,
+  createTicketComment,
+  fetchTicketComments,
+  adminOverrideTicket,
+  updateTicketStatusByAgent,
+  clarifyVagueTicket,
+  fetchTicketTextVersionHistory,
+  type CreateTicketRequest,
+} from "./api";
 
 export function useCreateTicket() {
   const qc = useQueryClient();
-  return useMutation<TicketResponseBean, unknown, CreateTicketRequest>({
+  return useMutation<UserTicketResponseBean, unknown, CreateTicketRequest>({
     mutationFn: createTicketApi,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["tickets", "user"] });
-      qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["tickets", "user"] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
     },
   });
 }
@@ -30,6 +53,19 @@ export function useTicketDetailsUser(ticketId: number | null, enabled = true) {
     queryFn: () => fetchTicketByIdForUser(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
     staleTime: 10_000,
+  });
+}
+
+//Vague ticket clarification by user
+export function useClarifyVagueTicket(ticketId: number) {
+  const qc = useQueryClient();
+
+  return useMutation<UserTicketResponseBean, unknown, UpdateVagueTicketRequestBean>({
+    mutationFn: (body) => clarifyVagueTicket(ticketId, body),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["ticket", "user", ticketId] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "user"] });
+    },
   });
 }
 
@@ -61,6 +97,16 @@ export function useTicketsForAgent(enabled = true) {
   });
 }
 
+//Text version history for agent/admin
+export function useTicketTextVersionHistory(ticketId: number | null, enabled = true) {
+  return useQuery<TicketTextVersionResponseBean[]>({
+    queryKey: ["ticket", ticketId, "text-history"],
+    queryFn: () => fetchTicketTextVersionHistory(ticketId as number),
+    enabled: enabled && typeof ticketId === "number",
+    staleTime: 10_000,
+  });
+}
+
 //Comments
 export function useTicketComments(ticketId: number | null, enabled = true) {
   return useQuery<TicketCommentResponseBean[]>({
@@ -73,7 +119,7 @@ export function useTicketComments(ticketId: number | null, enabled = true) {
 
 export function useCreateTicketComment(ticketId: number) {
   const qc = useQueryClient();
-  return useMutation<TicketCommentResponseBean, any, TicketCommentRequestBean>({
+  return useMutation<TicketCommentResponseBean, unknown, TicketCommentRequestBean>({
     mutationFn: (body) => createTicketComment(ticketId, body),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "comments"] });
@@ -84,7 +130,7 @@ export function useCreateTicketComment(ticketId: number) {
 //Admin override
 export function useAdminOverride(ticketId: number) {
   const qc = useQueryClient();
-  return useMutation<AdminOverrideResponseBean, any, AdminOverrideRequestBean>({
+  return useMutation<AdminOverrideResponseBean, unknown, AdminOverrideRequestBean>({
     mutationFn: (body) => adminOverrideTicket(ticketId, body),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
@@ -97,7 +143,7 @@ export function useAdminOverride(ticketId: number) {
 //Agent status update
 export function useAgentUpdateStatus(ticketId: number) {
   const qc = useQueryClient();
-  return useMutation<TicketResponseBean, any, UpdateTicketStatusRequestBean>({
+  return useMutation<TicketResponseBean, unknown, UpdateTicketStatusRequestBean>({
     mutationFn: (body) => updateTicketStatusByAgent(ticketId, body),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
