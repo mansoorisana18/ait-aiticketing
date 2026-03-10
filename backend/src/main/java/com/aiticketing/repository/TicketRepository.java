@@ -49,7 +49,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>{
 	       WHERE at.userId = :agentUserId
 	       ORDER BY t.createdAt DESC
 	    """)
-	    List<Ticket> findTicketsAssignedToAgent(@Param("userId") Long agentUserId);
+	    List<Ticket> findTicketsAssignedToAgent(@Param("agentUserId") Long agentUserId);
 	    
 	    //To find workload (active tickets) of all agents of that department
 	    //Returns list of [assignedToUserId, count]
