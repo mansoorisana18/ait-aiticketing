@@ -27,20 +27,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAgent = auth.role === "AGENT";
   const isAdmin = auth.role === "ADMIN";
 
-  //Sidebar links per role (KB is included but screens not built yet)
   const links: NavItem[] = [
-    //Tickets
     { to: "/tickets", label: "My Tickets", show: isUser },
     { to: "/tickets/new", label: "Create Ticket", show: isUser },
 
-    //Agent routes
     { to: "/agent/tickets", label: "Assigned to Me", show: isAgent },
 
-    //Admin routes
     { to: "/admin/tickets", label: "All Tickets", show: isAdmin },
     { to: "/admin/users", label: "Manage Users", show: isAdmin },
-    
-    //Knowledge Base placeholder routes (no pages yet)
+
     { to: "/kb", label: "Knowledge Base", show: true },
     { to: "/kb/my-submissions", label: "My KB Submissions", show: isAgent },
     { to: "/kb/approvals", label: "KB Approvals", show: isAdmin },
@@ -48,7 +43,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const visible = links.filter((l) => l.show);
 
-  //for highligting the current page in the sidebar - checks if the current path starts with the link path (to handle subpages)
   const isSelected = (to: string) => {
     if (to === "/tickets" && loc.pathname === "/tickets") return true;
     if (to === "/tickets/new" && loc.pathname === "/tickets/new") return true;
@@ -60,57 +54,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       <AppBar
         position="fixed"
+        color="primary"
         sx={{
           zIndex: (t) => t.zIndex.drawer + 1,
-          // background: "linear-gradient(90deg, rgba(230,57,155,0.95), rgba(138,86,172,0.95))",
-          // color: "#fff",
-          // boxShadow: "0px 10px 30px rgba(138,86,172,0.18)",
-          background: "linear-gradient(90deg, #023E8A 0%, #0077B6 100%)",
-          color: "#fff",
-          boxShadow: "0px 10px 30px rgba(2,62,138,0.18)",
+          left: 0,
+          right: 0,
+          width: "100%",
+          margin: 0,
         }}
       >
         <Toolbar sx={{ display: "flex", justifyContent: "space-between" }}>
-          {/* Left: Logo + App Name */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
             <img src={logo} alt="AiT" style={{ width: 94, height: 34, borderRadius: 6 }} />
-            {/* <Box
-              sx={{
-                width: 34,
-                height: 34,
-                borderRadius: 2,
-                background: "rgba(255,255,255,0.22)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 800,
-              }}
-              aria-label="Logo placeholder"
-            >
-              A
-            </Box> */}
 
-            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2, color: "#ffffff" }}>
               AI Ticketing System
             </Typography>
           </Box>
 
-          {/* Right of AppBar: Role + User + Logout */}
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
             <Chip
               label={auth.role}
               size="small"
               sx={{
-                bgcolor: "rgba(255,255,255,0.22)",
+                bgcolor: "rgba(255,255,255,0.16)",
                 color: "#fff",
-                border: "1px solid rgba(255,255,255,0.30)",
+                border: "1px solid rgba(255,255,255,0.24)",
                 fontWeight: 700,
               }}
             />
-            <Typography variant="body2" sx={{ opacity: 0.95 }}>
+            <Typography variant="body2" sx={{ color: "#ffffff", opacity: 0.95 }}>
               {auth.name}
             </Typography>
             <Button
@@ -118,8 +94,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               variant="outlined"
               sx={{
                 color: "#fff",
-                borderColor: "rgba(255,255,255,0.55)",
-                "&:hover": { borderColor: "#fff", backgroundColor: "rgba(255,255,255,0.12)" },
+                borderColor: "rgba(255,255,255,0.45)",
+                "&:hover": {
+                  borderColor: "#fff",
+                  backgroundColor: "rgba(255,255,255,0.10)",
+                },
               }}
             >
               Logout
@@ -132,17 +111,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         variant="permanent"
         sx={{
           width: drawerWidth,
+          flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
-            // bgcolor: "background.paper",
-            // borderRight: "1px solid rgba(138,86,172,0.12)",
-            bgcolor: "#008da6",
-            borderRight: "1px solid rgba(0,119,182,0.12)",
+            backgroundColor: "#8ECAE6",
+            color: "#023047",
+            borderRight: "1px solid rgba(2,48,71,0.10)",
           },
         }}
       >
         <Toolbar />
+        
         <List sx={{ pt: 1 }}>
           {visible.map((l) => (
             <ListItemButton
@@ -150,23 +130,51 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               component={Link}
               to={l.to}
               selected={isSelected(l.to)}
-              // sx={{ mx: 1, my: 0.5, borderRadius: 1, borderColor: "rgba(0,0,0,0.12)", border: "1px solid" }}
-            sx={{
-              border: 'none',
-              '&.Mui-selected': {
-                border: '1px solid',
-                borderColor: 'primary.main',
-                borderRadius: 1,
-              },
-            }}
+              sx={{
+                mx: 1,
+                my: 0.5,
+                px: 2,
+                borderRadius: 2,
+                color: "#023047",
+
+                "& .MuiListItemText-primary": {
+                  fontWeight: 700,
+                  color: "inherit",
+                },
+
+                // Hover state
+                "&:hover": {
+                  backgroundColor: "rgba(33,158,188,0.16)",
+                },
+
+                // Selected state
+                "&.Mui-selected": {
+                  backgroundColor: "rgba(255,255,255,0.70)",
+                  border: "2px solid #023047",
+                  color: "#023047",
+                  boxShadow: "0 2px 6px rgba(2,48,71,0.15)",
+                },
+
+                "&.Mui-selected .MuiListItemText-primary": {
+                  color: "#023047",
+                },
+              }}
             >
-              <ListItemText primary={l.label} primaryTypographyProps={{ sx: { fontWeight: 700, color: 'text.primary' } }}/>
+              <ListItemText primary={l.label} />
             </ListItemButton>
           ))}
         </List>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: "#dbf4ff", minHeight: "100vh" }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          bgcolor: "background.default",
+          minHeight: "100vh",
+        }}
+      >
         <Toolbar />
         {children}
       </Box>
