@@ -5,6 +5,7 @@ import { axiosClient } from "../api/axiosClient";
 import { setAccessToken, clearAccessToken } from "../api/authToken";
 import type { LoginResponseBean, UserRole } from "../api/types";
 import { subscribeSessionExpired } from "./authEvents";
+import { useQueryClient } from "@tanstack/react-query";
 
 type StoredProfile = { userId: number; name: string; email: string; role: UserRole };
 
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialAuthState);
+  const queryClient = useQueryClient();
 
   //Bootstrap once per page load: attempt /refresh using HttpOnly cookie
   useEffect(() => {
@@ -44,6 +46,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         const data = res.data;
+
+        //Clearing any stale cache on app load to prevent showing stale data from previous session
+        queryClient.clear();
+
         //store acccess token in memory
         setAccessToken(data.token);
 
@@ -58,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         clearAccessToken();
         clearAuthStorage();
+        queryClient.clear();
         dispatch({ type: "BOOTSTRAP_DONE" });
       }
     })();
@@ -73,6 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [state.token]);
 
   const loginSuccess = (payload: AuthPayload) => {
+    //Wiping previous users cached data on new login to prevent data leakage between users on same tab/device
+    queryClient.clear();
     setAccessToken(payload.token);
     setAuthToStorage({ userId: payload.userId, email: payload.email, name: payload.name, role: payload.role });
     dispatch({ type: "LOGIN_SUCCESS", payload });
@@ -85,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       clearAccessToken();
       clearAuthStorage();
+      queryClient.clear();
       dispatch({ type: "LOGOUT" });
     }
   };
@@ -93,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = subscribeSessionExpired(() => {
       clearAccessToken();
       clearAuthStorage();
+      queryClient.clear();
       dispatch({ type: "LOGOUT" });
     });
 
