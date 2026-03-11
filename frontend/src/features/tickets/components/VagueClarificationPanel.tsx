@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Alert, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import type { UserTicketResponseBean } from "../../../api/types";
 
 export default function VagueClarificationPanel({
@@ -24,7 +25,7 @@ export default function VagueClarificationPanel({
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, border: "1px solid rgba(138,86,172,0.12)" }}>
+    <Paper variant="outlined" sx={(theme) => ({ p: 2, borderRadius: 2, border: `2px solid ${alpha(theme.palette.secondary.dark, 0.12)}` })}>
       <Stack spacing={1.5}>
         <Typography sx={{ fontWeight: 1000 }}>Clarification Needed</Typography>
 
@@ -36,18 +37,19 @@ export default function VagueClarificationPanel({
 
         {ticket.clarificationPrompt && (
           <Typography variant="body2">
-            <strong>Prompt:</strong> {ticket.clarificationPrompt}
+            <strong>Required:</strong> {ticket.clarificationPrompt}
           </Typography>
         )}
 
         <TextField
-          label="Optional updated title"
+          label="Update ticket title (Optional)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
 
         <TextField
           label="Your clarification"
+          placeholder= "Provide the required information to clarify the issue and help us resolve your ticket faster."
           value={clarificationAnswer}
           onChange={(e) => setClarificationAnswer(e.target.value)}
           multiline
