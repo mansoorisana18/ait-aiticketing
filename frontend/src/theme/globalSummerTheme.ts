@@ -48,19 +48,87 @@ const globalSummerTheme = createTheme({
   },
 
   typography: {
-    fontFamily: '"Roboto", "Inter", "Helvetica", "Arial", sans-serif',
-    h1: { fontWeight: 800, color: "#023047" },
-    h2: { fontWeight: 800, color: "#023047" },
-    h3: { fontWeight: 800, color: "#023047" },
-    h4: { fontWeight: 800, color: "#023047" },
-    h5: { fontWeight: 700, color: "#023047" },
-    h6: { fontWeight: 700, color: "#023047" },
-    subtitle1: { fontWeight: 600, color: "#023047" },
-    subtitle2: { fontWeight: 600, color: "#4A6070" },
+    fontFamily: '"DM Sans", "Inter", "Helvetica", "Arial", sans-serif',
+
+    h1: {
+      fontWeight: 800,
+      color: "#023047",
+      fontSize: "2.2rem",
+      lineHeight: 1.18,
+    },
+    h2: {
+      fontWeight: 800,
+      color: "#023047",
+      fontSize: "1.72rem",
+      lineHeight: 1.2,
+    },
+    h3: {
+      fontWeight: 800,
+      color: "#023047",
+      fontSize: "1.45rem",
+      lineHeight: 1.22,
+    },
+    h4: {
+      fontWeight: 800,
+      color: "#023047",
+      fontSize: "1.22rem",
+      lineHeight: 1.24,
+    },
+    h5: {
+      fontWeight: 700,
+      color: "#023047",
+      fontSize: "1.02rem",
+      lineHeight: 1.24,
+    },
+    h6: {
+      fontWeight: 700,
+      color: "#023047",
+      fontSize: "0.94rem",
+      lineHeight: 1.24,
+    },
+
+    subtitle1: {
+      fontWeight: 600,
+      color: "#023047",
+      fontSize: "0.88rem",
+      lineHeight: 1.35,
+    },
+    subtitle2: {
+      fontWeight: 600,
+      color: "#4A6070",
+      fontSize: "0.8rem",
+      lineHeight: 1.3,
+    },
+
+    body1: {
+      fontSize: "0.88rem",
+      lineHeight: 1.45,
+      color: "#023047",
+    },
+    body2: {
+      fontSize: "0.82rem",
+      lineHeight: 1.4,
+      color: "#023047",
+    },
+
     button: {
       textTransform: "none",
       fontWeight: 700,
+      fontSize: "0.8rem",
       letterSpacing: "0.01em",
+    },
+
+    caption: {
+      fontSize: "0.7rem",
+      lineHeight: 1.25,
+      color: "#4A6070",
+    },
+
+    overline: {
+      fontSize: "0.66rem",
+      lineHeight: 1.2,
+      fontWeight: 700,
+      letterSpacing: "0.04em",
     },
   },
 
@@ -139,7 +207,7 @@ const globalSummerTheme = createTheme({
           backgroundColor: "#FFFFFF",
           backgroundImage: "linear-gradient(180deg, rgba(255,255,255,1), rgba(248,252,254,1))",
           border: "1px solid rgba(2,48,71,0.08)",
-          boxShadow: "0 4px 20px rgba(2,48,71,0.07)",
+          boxShadow: "0 2px 10px rgba(2,48,71,0.05)",
         },
         elevation1: {
           boxShadow: "0 2px 10px rgba(2,48,71,0.06)",
@@ -190,18 +258,18 @@ const globalSummerTheme = createTheme({
     MuiAccordionSummary: {
       styleOverrides: {
         root: {
-          backgroundColor: alpha("#8ECAE6", 0.14),
+          backgroundColor: alpha("#023047", 0.03),
           borderBottom: "1px solid rgba(2,48,71,0.08)",
-          minHeight: 52,
+          minHeight: 40,
           "&.Mui-expanded": {
-            minHeight: 52,
-            backgroundColor: alpha("#8ECAE6", 0.22),
+            minHeight: 40,
+            backgroundColor: alpha("#023047", 0.05),
           },
           "& .MuiAccordionSummary-content": {
-            margin: "12px 0",
+            margin: "6px 0",
           },
           "& .MuiAccordionSummary-content.Mui-expanded": {
-            margin: "12px 0",
+            margin: "6px 0",
           },
         },
       },
@@ -211,6 +279,7 @@ const globalSummerTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundColor: alpha("#FFFFFF", 0.96),
+          padding: 12,
         },
       },
     },
@@ -243,9 +312,17 @@ const globalSummerTheme = createTheme({
 
     MuiTableCell: {
       styleOverrides: {
+        head: {
+          fontSize: "0.76rem",
+          paddingTop: 8,
+          paddingBottom: 8,
+        },
         body: {
           color: "#023047",
           borderBottom: "1px solid rgba(2,48,71,0.07)",
+          fontSize: "0.78rem",
+          paddingTop: 7,
+          paddingBottom: 7,
         },
       },
     },
@@ -255,6 +332,12 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 8,
           boxShadow: "none",
+          fontSize: "0.78rem",
+          minHeight: 30,
+          paddingTop: 5,
+          paddingBottom: 5,
+          paddingLeft: 10,
+          paddingRight: 10,
           "&:hover": { boxShadow: "none" },
           "&:active": { boxShadow: "none" },
         },
@@ -302,6 +385,7 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 8,
           backgroundColor: "#FFFFFF",
+          fontSize: "0.8rem",
           "&:hover .MuiOutlinedInput-notchedOutline": {
             borderColor: "#219EBC",
           },
@@ -310,6 +394,9 @@ const globalSummerTheme = createTheme({
             borderWidth: 2,
           },
         },
+        input: {
+          fontSize: "0.8rem",
+        },
       },
     },
 
@@ -317,6 +404,7 @@ const globalSummerTheme = createTheme({
       styleOverrides: {
         root: {
           color: "#5A6B75",
+          fontSize: "0.78rem",
           "&.Mui-focused": { color: "#023047" },
         },
       },
@@ -327,7 +415,12 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 6,
           fontWeight: 700,
-          fontSize: "0.75rem",
+          fontSize: "0.64rem",
+          height: 20,
+        },
+        label: {
+          paddingLeft: 6,
+          paddingRight: 6,
         },
         colorPrimary: {
           backgroundColor: alpha("#023047", 0.10),
@@ -370,7 +463,10 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 8,
           fontWeight: 600,
-          boxShadow: "0 4px 16px rgba(2,48,71,0.10)",
+          fontSize: "0.78rem",  
+          boxShadow: "0 2px 8px rgba(2,48,71,0.08)",
+          paddingTop: 5,
+          paddingBottom: 5,
         },
         filledSuccess: { backgroundColor: "#15803D", color: "#FFFFFF" },
         filledError: { backgroundColor: "#C62828", color: "#FFFFFF" },
