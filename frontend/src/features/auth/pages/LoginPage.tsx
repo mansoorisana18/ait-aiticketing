@@ -7,7 +7,23 @@ import { useLogin } from "../hooks";
 import { normalizeApiError } from "../../../api/errorNormalizer";
 import { useAuth } from "../../../state/AuthContext";
 import logo from "../../../assets/Logo_AiT.png";
-import { subscribeSessionExpired } from "../../../state/authEvents";
+import { subscribeSessionExpired, resetSessionExpiredEvent } from "../../../state/authEvents";
+
+function validateLogin(email: string, password: string) {
+  const errors: Record<string, string> = {};
+
+  if (!email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (!password.trim()) {
+    errors.password = "Password is required";
+  }
+
+  return errors;
+}
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -18,14 +34,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [snack, setSnack] = useState({ open: false, message: "" });
+  const [snack, setSnack] = useState<{ 
+    open: boolean; 
+    message: string; 
+    severity?: "success" | "error" | "warning" | "info" 
+  }>({ 
+    open: false, 
+    message: "", 
+    severity: "info" 
+  });
 
   React.useEffect(() => {
+    resetSessionExpiredEvent();
+
     const unsub = subscribeSessionExpired(() => {
-      setSnack({
-        open: true,
-        message: "Session expired. Please login again.",
-      });
+      setSnack((prev) => 
+        prev.open ? prev : {
+          open: true,
+          message: "Session expired. Please login again.",
+          severity: "warning",
+        }
+      );
     });
 
     return unsub;
@@ -33,9 +62,13 @@ export default function LoginPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFieldErrors({});
+    
+    const clientErrors = validateLogin(email, password);
+    setFieldErrors(clientErrors);
+    
+    if (Object.keys(clientErrors).length > 0) return;
     try {
-      const resp = await login.mutateAsync({ email, password });
+      const resp = await login.mutateAsync({ email: email.trim(), password });
 
       loginSuccess({
         userId: resp.userId,
@@ -49,7 +82,7 @@ export default function LoginPage() {
     } catch (err) {
       const ne = normalizeApiError(err);
       if (ne.kind === "validation") setFieldErrors(ne.fieldErrors ?? {});
-      else setSnack({ open: true, message: ne.message });
+      else setSnack({ open: true, message: ne.message, severity: "error", });
     }
   };
 
@@ -71,7 +104,7 @@ export default function LoginPage() {
           alt="Logo"
           sx={{ width: 300, mb: 2, borderRadius: 2 }}
         />
-        <Typography variant="h2" fontWeight="bold">
+        <Typography variant="h1" fontWeight="bold">
           AI- Powered Automated Ticket Management Platform
         </Typography>
         {/* <Typography variant="h4" fontWeight="bold">
@@ -86,16 +119,26 @@ export default function LoginPage() {
             name="email"
             label="Email"
             value={email}
-            onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
+            onChange={(e) => {
+              setEmail((e.target as HTMLInputElement).value);
+              if (fieldErrors.email) {
+                setFieldErrors((prev) => ({ ...prev, email: "" }));
+              }
+            }}
             fieldErrors={fieldErrors}
-          />
+          />      
 
           <FormTextField
             name="password"
             label="Password"
             type="password"
             value={password}
-            onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
+            onChange={(e) => {
+              setPassword((e.target as HTMLInputElement).value);
+              if (fieldErrors.password) {
+                setFieldErrors((prev) => ({ ...prev, password: "" }));
+              }
+            }}
             fieldErrors={fieldErrors}
           />
 
@@ -108,7 +151,7 @@ export default function LoginPage() {
           </Typography>
         </Stack>
       </Paper>
-      <GlobalSnackbar open={snack.open} message={snack.message} onClose={() => setSnack({ open: false, message: "" })} />
+      <GlobalSnackbar open={snack.open} message={snack.message} severity={snack.severity} onClose={() => setSnack((s) => ({ ...s, open: false }))} />
     </>
   );
 }

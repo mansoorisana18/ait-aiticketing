@@ -7,6 +7,30 @@ import { useRegister } from "../hooks";
 import { normalizeApiError } from "../../../api/errorNormalizer";
 import logo from "../../../assets/Logo_AiT.png";
 
+function validateRegister(name: string, email: string, password: string) {
+  const errors: Record<string, string> = {};
+
+  if (!name.trim()) {
+    errors.name = "Name is required";
+  } else if (name.trim().length < 2) {
+    errors.name = "Name must be at least 2 characters";
+  }
+
+  if (!email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (!password.trim()) {
+    errors.password = "Password is required";
+  } else if (password.trim().length < 6) {
+    errors.password = "Password must be at least 6 characters";
+  }
+
+  return errors;
+}
+
 export default function RegisterPage() {
   const nav = useNavigate();
   const register = useRegister();
@@ -19,7 +43,7 @@ export default function RegisterPage() {
   const [snack, setSnack] = useState<{
     open: boolean;
     message: string;
-    severity?: "success" | "error";
+    severity?: "success" | "error" | "warning" | "info";
   }>({
     open: false,
     message: "",
@@ -28,10 +52,18 @@ export default function RegisterPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFieldErrors({});
+
+    const clientErrors = validateRegister(name, email, password);
+    setFieldErrors(clientErrors);
+
+    if (Object.keys(clientErrors).length > 0) return;
 
     try {
-      await register.mutateAsync({ email, name, password });
+      await register.mutateAsync({
+        email: email.trim(),
+        name: name.trim(),
+        password,
+      });
 
       setSnack({
         open: true,
@@ -74,7 +106,7 @@ export default function RegisterPage() {
           alt="Logo"
           sx={{ width: 300, mb: 2, borderRadius: 2 }}
         />
-        <Typography variant="h2" fontWeight="bold" alignSelf="center">
+        <Typography variant="h1" fontWeight="bold" alignSelf="center">
           AI- Powered Automated Ticket Management Platform
         </Typography>
       </Box>
@@ -87,7 +119,12 @@ export default function RegisterPage() {
             name="email"
             label="Email"
             value={email}
-            onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
+            onChange={(e) => {
+              setEmail((e.target as HTMLInputElement).value);
+              if (fieldErrors.email) {
+                setFieldErrors((prev) => ({ ...prev, email: "" }));
+              }
+            }}
             fieldErrors={fieldErrors}
           />
 
@@ -95,7 +132,12 @@ export default function RegisterPage() {
             name="name"
             label="Name"
             value={name}
-            onChange={(e) => setName((e.target as HTMLInputElement).value)}
+            onChange={(e) => {
+              setName((e.target as HTMLInputElement).value);
+              if (fieldErrors.name) {
+                setFieldErrors((prev) => ({ ...prev, name: "" }));
+              }
+            }}
             fieldErrors={fieldErrors}
           />
 
@@ -104,7 +146,12 @@ export default function RegisterPage() {
             label="Password"
             type="password"
             value={password}
-            onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
+            onChange={(e) => {
+              setPassword((e.target as HTMLInputElement).value);
+              if (fieldErrors.password) {
+                setFieldErrors((prev) => ({ ...prev, password: "" }));
+              }
+            }}
             fieldErrors={fieldErrors}
           />
 
