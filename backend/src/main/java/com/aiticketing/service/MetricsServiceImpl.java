@@ -153,15 +153,17 @@ public class MetricsServiceImpl implements MetricsService {
 
         Map<String, Long> statusCounts = toStatusCountMap(statusRows);
 
-        Map<String, Object> assignmentRow = queryForSingleRow("""
+        Map<String, Object> summaryRow = queryForSingleRow("""
                 SELECT
                   COUNT(*) AS total_tickets,
                   COUNT(ticket_assigned_to) AS assigned_count,
-                  COUNT(*) - COUNT(ticket_assigned_to) AS unassigned_count
+                  COUNT(*) - COUNT(ticket_assigned_to) AS unassigned_count,
+                  COUNT(*) FILTER (WHERE ticket_ai_priority = 'HIGH' ) AS high_priority_count,
+        		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'URGENT' ) AS urgent_priority_count
                 FROM tickets
                 """);
 
-        resp.totalTickets = getLong(assignmentRow, "total_tickets");
+        resp.totalTickets = getLong(summaryRow, "total_tickets");
         resp.newCount = statusCounts.getOrDefault("NEW", 0L);
         resp.aiProcessingCount = statusCounts.getOrDefault("AI_PROCESSING", 0L);
         resp.vagueCount = statusCounts.getOrDefault("VAGUE", 0L);
@@ -169,8 +171,10 @@ public class MetricsServiceImpl implements MetricsService {
         resp.inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
         resp.resolvedCount = statusCounts.getOrDefault("RESOLVED", 0L);
         resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
-        resp.assignedCount = getLong(assignmentRow, "assigned_count");
-        resp.unassignedCount = getLong(assignmentRow, "unassigned_count");
+        resp.assignedCount = getLong(summaryRow, "assigned_count");
+        resp.unassignedCount = getLong(summaryRow, "unassigned_count");
+        resp.highPriorityCount = getLong(summaryRow, "high_priority_count");
+        resp.urgentPriorityCount = getLong(summaryRow, "urgent_priority_count");
 
         return resp;
     }
@@ -186,6 +190,14 @@ public class MetricsServiceImpl implements MetricsService {
                 """, agentUserId);
 
         Map<String, Long> statusCounts = toStatusCountMap(statusRows);
+        
+        Map<String, Object> priorityRow = queryForSingleRow("""
+        		SELECT
+        		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'HIGH' ) AS high_priority_count,
+        		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'URGENT' ) AS urgent_priority_count
+        		FROM tickets
+        		WHERE ticket_assigned_to = ?
+        		""", agentUserId);
 
         long totalTickets = statusCounts.values().stream().mapToLong(Long::longValue).sum();
 
@@ -199,6 +211,8 @@ public class MetricsServiceImpl implements MetricsService {
         resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
         resp.assignedCount = totalTickets;
         resp.unassignedCount = 0L;
+        resp.highPriorityCount = getLong(priorityRow, "high_priority_count");
+        resp.urgentPriorityCount = getLong(priorityRow, "urgent_priority_count");
 
         return resp;
     }

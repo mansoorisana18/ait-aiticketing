@@ -12,4 +12,6 @@ public class TicketSummaryMetricsResponseBean {
     public Long closedCount;
     public Long assignedCount;
     public Long unassignedCount;
+    public Long highPriorityCount;
+    public Long urgentPriorityCount;
 }
