@@ -1,0 +1,285 @@
+package com.aiticketing.service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import com.aiticketing.bean.response.AiSummaryMetricsResponseBean;
+import com.aiticketing.bean.response.RoutingMetricsResponseBean;
+import com.aiticketing.bean.response.TicketSummaryMetricsResponseBean;
+import com.aiticketing.bean.response.TriageMetricsResponseBean;
+
+@Service
+public class MetricsServiceImpl implements MetricsService {
+
+    private static final Logger METRICS_SERVICE_LOG = LoggerFactory.getLogger(MetricsServiceImpl.class);
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public MetricsServiceImpl(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public AiSummaryMetricsResponseBean getAdminAiSummaryMetrics() {
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: in getAdminAiSummaryMetrics()");
+
+        AiSummaryMetricsResponseBean resp = new AiSummaryMetricsResponseBean();
+        resp.triage = buildTriageMetrics();
+        resp.routing = buildRoutingMetrics();
+
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAdminAiSummaryMetrics()");
+        return resp;
+    }
+
+    @Override
+    public TicketSummaryMetricsResponseBean getAdminTicketSummaryMetrics() {
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: in getAdminTicketSummaryMetrics()");
+        TicketSummaryMetricsResponseBean resp = buildAdminTicketSummary();
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAdminTicketSummaryMetrics()");
+        return resp;
+    }
+
+    @Override
+    public TicketSummaryMetricsResponseBean getAgentTicketSummaryMetrics(Long agentUserId) {
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: in getAgentTicketSummaryMetrics() :: agentUserId={}", agentUserId);
+        TicketSummaryMetricsResponseBean resp = buildAgentTicketSummary(agentUserId);
+        METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAgentTicketSummaryMetrics()");
+        return resp;
+    }
+
+    private TriageMetricsResponseBean buildTriageMetrics() {
+        TriageMetricsResponseBean triage = new TriageMetricsResponseBean();
+
+        Map<String, Object> row = queryForSingleRow("""
+                SELECT
+                  COUNT(*) AS total_tickets_created,
+                  COUNT(ticket_ai_triaged_at) AS triage_completed_count,
+                  COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_ai_triaged_at - ticket_created_at))), 0) AS avg_triage_time_seconds,
+                  COALESCE(AVG(ticket_ai_confidence), 0) AS avg_ai_confidence,
+                  COUNT(*) FILTER (
+                    WHERE ticket_status = 'VAGUE'
+                      AND ticket_ai_triaged_at IS NOT NULL
+                  ) AS vague_count
+                FROM tickets
+                """);
+
+        long totalTicketsCreated = getLong(row, "total_tickets_created");
+        long triageCompletedCount = getLong(row, "triage_completed_count");
+        double avgTriageTimeSeconds = getDouble(row, "avg_triage_time_seconds");
+        double avgAiConfidence = getDouble(row, "avg_ai_confidence");
+        long vagueCount = getLong(row, "vague_count");
+
+        long manualTriageOverrideCount = queryForLongValue("""
+                SELECT COUNT(*)
+				FROM admin_overrides
+				WHERE ao_override_type IN ('CATEGORY', 'PRIORITY')
+				   OR (ao_override_type = 'STATUS' AND ao_old_value = 'VAGUE')
+                """);
+
+        triage.totalTicketsCreated = totalTicketsCreated;
+        triage.triageCompletedCount = triageCompletedCount;
+        triage.triageSuccessRate = calculatePercentage(triageCompletedCount, totalTicketsCreated);
+        triage.averageTriageTimeSeconds = roundToTwoDecimals(avgTriageTimeSeconds);
+        triage.vagueRate = calculatePercentage(vagueCount, triageCompletedCount);
+        triage.averageAiConfidence = roundToFourDecimals(avgAiConfidence);
+        triage.manualTriageOverrideRate = calculatePercentage(manualTriageOverrideCount, triageCompletedCount);
+
+        return triage;
+    }
+
+    private RoutingMetricsResponseBean buildRoutingMetrics() {
+        RoutingMetricsResponseBean routing = new RoutingMetricsResponseBean();
+
+        List<Map<String, Object>> outcomeRows = queryForRowList("""
+                SELECT
+                  ad_output_json ->> 'outcome' AS outcome,
+                  COUNT(*) AS cnt
+                FROM ai_decisions
+                WHERE ad_decision_type = 'ROUTING'
+                GROUP BY ad_output_json ->> 'outcome'
+                """);
+
+        long routingAttempts = 0L;
+        long autoAssignedCount = 0L;
+        long noEligibleAgentCount = 0L;
+
+        for (Map<String, Object> row : outcomeRows) {
+            String outcome = row.get("outcome") == null ? null : row.get("outcome").toString();
+            long cnt = getLong(row, "cnt");
+            routingAttempts += cnt;
+
+            if ("ASSIGNED".equalsIgnoreCase(outcome)) {
+                autoAssignedCount = cnt;
+            } else if ("NO_ELIGIBLE_AGENT".equalsIgnoreCase(outcome)) {
+                noEligibleAgentCount = cnt;
+            }
+        }
+
+        double avgTimeToAssignmentFromTriageSeconds = queryForDoubleValue("""
+                SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_first_assigned_at - ticket_ai_triaged_at))), 0)
+                FROM tickets
+                WHERE ticket_first_assigned_at IS NOT NULL
+                """);
+
+        long assignmentOverrideCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM admin_overrides
+                WHERE ao_override_type = 'ASSIGNMENT'
+                """);
+
+        routing.routingAttempts = routingAttempts;
+        routing.autoRoutingSuccessRate = calculatePercentage(autoAssignedCount, routingAttempts);
+        routing.noEligibleAgentRate = calculatePercentage(noEligibleAgentCount, routingAttempts);
+        routing.averageTimeToAssignmentFromTriageSeconds = roundToTwoDecimals(avgTimeToAssignmentFromTriageSeconds);
+        routing.assignmentOverrideRate = calculatePercentage(assignmentOverrideCount, autoAssignedCount);
+
+        return routing;
+    }
+
+    private TicketSummaryMetricsResponseBean buildAdminTicketSummary() {
+        TicketSummaryMetricsResponseBean resp = new TicketSummaryMetricsResponseBean();
+
+        List<Map<String, Object>> statusRows = queryForRowList("""
+                SELECT ticket_status, COUNT(*) AS cnt
+                FROM tickets
+                GROUP BY ticket_status
+                """);
+
+        Map<String, Long> statusCounts = toStatusCountMap(statusRows);
+
+        Map<String, Object> assignmentRow = queryForSingleRow("""
+                SELECT
+                  COUNT(*) AS total_tickets,
+                  COUNT(ticket_assigned_to) AS assigned_count,
+                  COUNT(*) - COUNT(ticket_assigned_to) AS unassigned_count
+                FROM tickets
+                """);
+
+        resp.totalTickets = getLong(assignmentRow, "total_tickets");
+        resp.newCount = statusCounts.getOrDefault("NEW", 0L);
+        resp.aiProcessingCount = statusCounts.getOrDefault("AI_PROCESSING", 0L);
+        resp.vagueCount = statusCounts.getOrDefault("VAGUE", 0L);
+        resp.readyCount = statusCounts.getOrDefault("READY", 0L);
+        resp.inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
+        resp.resolvedCount = statusCounts.getOrDefault("RESOLVED", 0L);
+        resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
+        resp.assignedCount = getLong(assignmentRow, "assigned_count");
+        resp.unassignedCount = getLong(assignmentRow, "unassigned_count");
+
+        return resp;
+    }
+
+    private TicketSummaryMetricsResponseBean buildAgentTicketSummary(Long agentUserId) {
+        TicketSummaryMetricsResponseBean resp = new TicketSummaryMetricsResponseBean();
+
+        List<Map<String, Object>> statusRows = queryForRowList("""
+                SELECT ticket_status, COUNT(*) AS cnt
+                FROM tickets
+                WHERE ticket_assigned_to = ?
+                GROUP BY ticket_status
+                """, agentUserId);
+
+        Map<String, Long> statusCounts = toStatusCountMap(statusRows);
+
+        long totalTickets = statusCounts.values().stream().mapToLong(Long::longValue).sum();
+
+        resp.totalTickets = totalTickets;
+        resp.newCount = statusCounts.getOrDefault("NEW", 0L);
+        resp.aiProcessingCount = statusCounts.getOrDefault("AI_PROCESSING", 0L);
+        resp.vagueCount = statusCounts.getOrDefault("VAGUE", 0L);
+        resp.readyCount = statusCounts.getOrDefault("READY", 0L);
+        resp.inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
+        resp.resolvedCount = statusCounts.getOrDefault("RESOLVED", 0L);
+        resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
+        resp.assignedCount = totalTickets;
+        resp.unassignedCount = 0L;
+
+        return resp;
+    }
+
+    private Map<String, Long> toStatusCountMap(List<Map<String, Object>> rows) {
+        Map<String, Long> map = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object statusObj = row.get("ticket_status");
+            if (statusObj != null) {
+                map.put(statusObj.toString(), getLong(row, "cnt"));
+            }
+        }
+        return map;
+    }
+
+    private Map<String, Object> queryForSingleRow(String sql, Object... args) {
+        try {
+            return jdbcTemplate.queryForMap(sql, args);
+        } catch (Exception ex) {
+            METRICS_SERVICE_LOG.error("Metrics queryForSingleRow failed. SQL={}", sql, ex);
+            return Map.of();
+        }
+    }
+
+    private List<Map<String, Object>> queryForRowList(String sql, Object... args) {
+        try {
+            return jdbcTemplate.queryForList(sql, args);
+        } catch (Exception ex) {
+            METRICS_SERVICE_LOG.error("Metrics queryForRowList failed. SQL={}", sql, ex);
+            return List.of();
+        }
+    }
+
+    private long queryForLongValue(String sql, Object... args) {
+        try {
+            Long value = jdbcTemplate.queryForObject(sql, Long.class, args);
+            return value == null ? 0L : value;
+        } catch (Exception ex) {
+            METRICS_SERVICE_LOG.error("Metrics queryForLongValue failed. SQL={}", sql, ex);
+            return 0L;
+        }
+    }
+
+    private double queryForDoubleValue(String sql, Object... args) {
+        try {
+            Double value = jdbcTemplate.queryForObject(sql, Double.class, args);
+            return value == null ? 0.0 : value;
+        } catch (Exception ex) {
+            METRICS_SERVICE_LOG.error("Metrics queryForDoubleValue failed. SQL={}", sql, ex);
+            return 0.0;
+        }
+    }
+
+    private long getLong(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        if (value instanceof Number n) {
+            return n.longValue();
+        }
+        return 0L;
+    }
+
+    private double getDouble(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        if (value instanceof Number n) {
+            return n.doubleValue();
+        }
+        return 0.0;
+    }
+
+    private double calculatePercentage(long numerator, long denominator) {
+        if (denominator <= 0) {
+            return 0.0;
+        }
+        return roundToTwoDecimals((numerator * 100.0) / denominator);
+    }
+
+    private double roundToTwoDecimals(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private double roundToFourDecimals(double value) {
+        return Math.round(value * 10000.0) / 10000.0;
+    }
+}

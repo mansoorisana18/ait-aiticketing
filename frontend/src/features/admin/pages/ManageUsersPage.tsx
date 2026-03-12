@@ -108,7 +108,7 @@ export default function ManageUsersPage() {
                   <TableCell>
                     <Chip label={u.role} size="small" color={roleChipColor(u.role)} />
                   </TableCell>
-                  <TableCell>{u.department ?? "—"}</TableCell>
+                  <TableCell>{u.department ?? "-"}</TableCell>
                   <TableCell>
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <Button

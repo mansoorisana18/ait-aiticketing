@@ -62,6 +62,10 @@ public class SecurityConfig {
 	                //Logout requires auth so that we can revoke that users refresh token
 	                .requestMatchers(HttpMethod.POST, "/api/users/logout").authenticated()
 	                
+	                //metrics
+	                .requestMatchers(HttpMethod.GET, "/api/metrics/admin/**").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/metrics/agent/**").hasAnyRole("AGENT", "ADMIN")
+	                
 	                //admin user endpoints
 	                .requestMatchers(HttpMethod.GET, "/api/users/admin").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.PATCH, "/api/users/admin/**").hasRole("ADMIN")
