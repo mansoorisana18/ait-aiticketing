@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import type { TicketResponseBean, UserRole, UserTicketResponseBean } from "../../../api/types";
 import { statusChipSx } from "./statusColors";
 import { priorityChipSx } from "./priorityColors";
-import { formatRelative } from "../../../utils/dateTime";
+import { formatDateTime, formatRelative } from "../../../utils/dateTime";
 
 type AnyTicketRow = TicketResponseBean | UserTicketResponseBean;
 
@@ -55,10 +55,11 @@ export default function TicketTable({ tickets, role }: Props) {
             {showInternalCols && <TableCell>Duplicate</TableCell>}
             {showInternalCols && <TableCell>Category</TableCell>}
             {showInternalCols && <TableCell>Priority</TableCell>}
-            {showInternalCols && <TableCell>AI Confidence</TableCell>}
+            {showInternalCols && <TableCell sx={{ minWidth: 95 }}>AI Triaged</TableCell>}
             {showInternalCols && <TableCell>Assigned</TableCell>}
 
             <TableCell>Updated</TableCell>
+            <TableCell>Created</TableCell>
           </TableRow>
         </TableHead>
 
@@ -83,7 +84,7 @@ export default function TicketTable({ tickets, role }: Props) {
               >
                 <TableCell>{t.ticketId}</TableCell>
 
-                <TableCell sx={{ maxWidth: 360 }}>
+                <TableCell sx={{ maxWidth: 800 }}>
                   <Typography fontWeight={800}>{t.title}</Typography>
 
                   <Typography
@@ -175,10 +176,11 @@ export default function TicketTable({ tickets, role }: Props) {
                   </TableCell>
                 )}
 
-                {showInternalCols && <TableCell>{internal ? (t.aiConfidence ?? "—") : "—"}</TableCell>}
+                {showInternalCols && <TableCell>{internal ? (formatRelative(t.aiTriagedAt ?? null) ?? "—") : "—"}</TableCell>}
                 {showInternalCols && <TableCell>{internal ? (t.assignedToName ?? "Unassigned") : "—"}</TableCell>}
 
                 <TableCell>{formatRelative(t.updatedAt ?? null)}</TableCell>
+                <TableCell>{formatRelative(t.createdAt ?? null)}</TableCell>
               </TableRow>
             );
           })}

@@ -15,7 +15,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../state/AuthContext";
 import logo from "../assets/Logo_AiT.png";
 
-const drawerWidth = 260;
+const drawerWidth = 200;
 
 type NavItem = { to: string; label: string; show: boolean };
 
