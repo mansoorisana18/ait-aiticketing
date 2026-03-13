@@ -186,3 +186,43 @@ export type TicketTextVersionResponseBean = {
   createdByUserId: number;
   createdAt?: string | null;
 }
+
+//Ticket summary metrics for admin & agent tickt pages
+export type TicketSummaryMetricsResponseBean = {
+  totalTickets: number;
+  newCount: number;
+  aiProcessingCount: number;
+  vagueCount: number;
+  readyCount: number;
+  inProgressCount: number;
+  resolvedCount: number;
+  closedCount: number;
+  assignedCount: number;
+  unassignedCount: number;
+  highPriorityCount: number;
+  urgentPriorityCount: number;
+};
+
+//AI summary metrics for admin analytics page
+export type TriageMetricsResponseBean = {
+  totalTicketsCreated: number;
+  triageCompletedCount: number;
+  triageSuccessRate: number | null;
+  averageTriageTimeSeconds: number | null;
+  vagueRate: number | null;
+  averageAiConfidence: number | null;
+  manualTriageOverrideRate: number | null;
+};
+
+export type RoutingMetricsResponseBean = {
+  routingAttempts: number;
+  autoRoutingSuccessRate: number | null;
+  noEligibleAgentRate: number | null;
+  averageTimeToAssignmentFromTriageSeconds: number | null;
+  assignmentOverrideRate: number | null;
+};
+
+export type AiSummaryMetricsResponseBean = {
+  triage: TriageMetricsResponseBean;
+  routing: RoutingMetricsResponseBean;
+};

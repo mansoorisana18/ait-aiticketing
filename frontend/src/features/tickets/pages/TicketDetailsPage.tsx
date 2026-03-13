@@ -668,7 +668,7 @@ export default function TicketDetailsPage() {
                       Apply a manual override when human or operational judgment should take precedence.
                     </Typography>
 
-                    <Stack spacing={0.8}>
+                    <Stack spacing={1.1}>
                       <TextField
                         select
                         label="Override Type"
