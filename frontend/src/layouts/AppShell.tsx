@@ -35,6 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     { to: "/admin/tickets", label: "All Tickets", show: isAdmin },
     { to: "/admin/users", label: "Manage Users", show: isAdmin },
+    { to: "/admin/analytics", label: "Analytics", show: isAdmin },
 
     { to: "/kb", label: "Knowledge Base", show: true },
     { to: "/kb/my-submissions", label: "My KB Submissions", show: isAgent },
@@ -49,6 +50,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (to === "/agent/tickets" && loc.pathname.startsWith("/agent")) return true;
     if (to === "/admin/tickets" && loc.pathname === "/admin/tickets") return true;
     if (to === "/admin/users" && loc.pathname === "/admin/users") return true;
+    if (to === "/admin/analytics" && loc.pathname === "/admin/analytics") return true;
     if (to.startsWith("/kb") && loc.pathname.startsWith("/kb")) return true;
     return loc.pathname === to;
   };

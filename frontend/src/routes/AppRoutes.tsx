@@ -16,6 +16,7 @@ import AgentTicketsPage from "../features/agent/pages/AgentTicketsPage";
 import { useAuth } from "../state/AuthContext";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ManageUsersPage from "../features/admin/pages/ManageUsersPage";
+import AnalyticsPage from "../features/metrics/pages/AnalyticsPage";
 
 function HomeRedirect() {
   const { auth } = useAuth();
@@ -54,6 +55,7 @@ export default function AppRoutes() {
         <Route element={<RoleRoute allowedRoles={["ADMIN"]} />}>
           <Route path="/admin/tickets" element={<AdminTicketsPage />} />
           <Route path="/admin/users" element={<ManageUsersPage />} />
+          <Route path="/admin/analytics" element={<AnalyticsPage />} />
         </Route>
       </Route>
 
