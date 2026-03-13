@@ -53,80 +53,80 @@ const globalSummerTheme = createTheme({
     h1: {
       fontWeight: 800,
       color: "#023047",
-      fontSize: "2.2rem",
-      lineHeight: 1.18,
+      fontSize: "1.92rem",
+      lineHeight: 1.16,
     },
     h2: {
       fontWeight: 800,
       color: "#023047",
-      fontSize: "1.72rem",
-      lineHeight: 1.2,
+      fontSize: "1.62rem",
+      lineHeight: 1.18,
     },
     h3: {
       fontWeight: 800,
       color: "#023047",
-      fontSize: "1.45rem",
-      lineHeight: 1.22,
+      fontSize: "1.36rem",
+      lineHeight: 1.2,
     },
     h4: {
       fontWeight: 800,
       color: "#023047",
-      fontSize: "1.22rem",
-      lineHeight: 1.24,
+      fontSize: "1.16rem",
+      lineHeight: 1.22,
     },
     h5: {
       fontWeight: 700,
       color: "#023047",
-      fontSize: "1.02rem",
-      lineHeight: 1.24,
+      fontSize: "1rem",
+      lineHeight: 1.22,
     },
     h6: {
       fontWeight: 700,
       color: "#023047",
-      fontSize: "0.94rem",
-      lineHeight: 1.24,
+      fontSize: "0.92rem",
+      lineHeight: 1.22,
     },
 
     subtitle1: {
       fontWeight: 600,
       color: "#023047",
-      fontSize: "0.88rem",
-      lineHeight: 1.35,
+      fontSize: "0.86rem",
+      lineHeight: 1.32,
     },
     subtitle2: {
       fontWeight: 600,
       color: "#4A6070",
-      fontSize: "0.8rem",
-      lineHeight: 1.3,
+      fontSize: "0.78rem",
+      lineHeight: 1.28,
     },
 
     body1: {
-      fontSize: "0.88rem",
-      lineHeight: 1.45,
+      fontSize: "0.86rem",
+      lineHeight: 1.42,
       color: "#023047",
     },
     body2: {
-      fontSize: "0.82rem",
-      lineHeight: 1.4,
+      fontSize: "0.8rem",
+      lineHeight: 1.36,
       color: "#023047",
     },
 
     button: {
       textTransform: "none",
       fontWeight: 700,
-      fontSize: "0.8rem",
+      fontSize: "0.78rem",
       letterSpacing: "0.01em",
     },
 
     caption: {
-      fontSize: "0.7rem",
-      lineHeight: 1.25,
+      fontSize: "0.68rem",
+      lineHeight: 1.22,
       color: "#4A6070",
     },
 
     overline: {
-      fontSize: "0.66rem",
-      lineHeight: 1.2,
+      fontSize: "0.64rem",
+      lineHeight: 1.18,
       fontWeight: 700,
       letterSpacing: "0.04em",
     },
@@ -209,15 +209,15 @@ const globalSummerTheme = createTheme({
           border: "1px solid rgba(2,48,71,0.08)",
           boxShadow: "0 2px 10px rgba(2,48,71,0.05)",
         },
-        elevation1: {
-          boxShadow: "0 2px 10px rgba(2,48,71,0.06)",
-        },
-        elevation2: {
-          boxShadow: "0 4px 16px rgba(2,48,71,0.08)",
-        },
-        elevation3: {
-          boxShadow: "0 8px 28px rgba(2,48,71,0.10)",
-        },
+        // elevation1: {
+        //   boxShadow: "0 2px 8px rgba(2,48,71,0.05)",
+        // },
+        // elevation2: {
+        //   boxShadow: "0 3px 12px rgba(2,48,71,0.07)",
+        // },
+        // elevation3: {
+        //   boxShadow: "0 6px 18px rgba(2,48,71,0.09)",
+        // },
       },
     },
 
@@ -278,7 +278,7 @@ const globalSummerTheme = createTheme({
     MuiAccordionDetails: {
       styleOverrides: {
         root: {
-          backgroundColor: alpha("#FFFFFF", 0.96),
+          backgroundColor: alpha("#FFFFFF", 0.98),
           padding: 12,
         },
       },
@@ -313,14 +313,14 @@ const globalSummerTheme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         head: {
-          fontSize: "0.76rem",
+          fontSize: "0.74rem",
           paddingTop: 8,
           paddingBottom: 8,
         },
         body: {
           color: "#023047",
           borderBottom: "1px solid rgba(2,48,71,0.07)",
-          fontSize: "0.78rem",
+          fontSize: "0.76rem",
           paddingTop: 7,
           paddingBottom: 7,
         },
@@ -333,7 +333,7 @@ const globalSummerTheme = createTheme({
           borderRadius: 8,
           boxShadow: "none",
           fontSize: "0.78rem",
-          minHeight: 30,
+          minHeight: 32,
           paddingTop: 5,
           paddingBottom: 5,
           paddingLeft: 10,
@@ -385,7 +385,7 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 8,
           backgroundColor: "#FFFFFF",
-          fontSize: "0.8rem",
+          fontSize: "0.78rem",
           "&:hover .MuiOutlinedInput-notchedOutline": {
             borderColor: "#219EBC",
           },
@@ -396,6 +396,8 @@ const globalSummerTheme = createTheme({
         },
         input: {
           fontSize: "0.8rem",
+          paddingTop: 10,
+          paddingBottom: 10,
         },
       },
     },
@@ -406,6 +408,12 @@ const globalSummerTheme = createTheme({
           color: "#5A6B75",
           fontSize: "0.78rem",
           "&.Mui-focused": { color: "#023047" },
+        },
+        outlined: {
+          transform: "translate(14px, 10px) scale(1)",
+          "&.MuiInputLabel-shrink": {
+            transform: "translate(14px, -9px) scale(0.75)",
+          },
         },
       },
     },
@@ -463,7 +471,7 @@ const globalSummerTheme = createTheme({
         root: {
           borderRadius: 8,
           fontWeight: 600,
-          fontSize: "0.78rem",  
+          fontSize: "0.76rem",  
           boxShadow: "0 2px 8px rgba(2,48,71,0.08)",
           paddingTop: 5,
           paddingBottom: 5,
