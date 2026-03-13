@@ -125,6 +125,7 @@ public class MetricsServiceImpl implements MetricsService {
                 SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_first_assigned_at - ticket_ai_triaged_at))), 0)
                 FROM tickets
                 WHERE ticket_first_assigned_at IS NOT NULL
+                	AND ticket_ai_triaged_at IS NOT NULL
                 """);
 
         long assignmentOverrideCount = queryForLongValue("""
@@ -145,75 +146,99 @@ public class MetricsServiceImpl implements MetricsService {
     private TicketSummaryMetricsResponseBean buildAdminTicketSummary() {
         TicketSummaryMetricsResponseBean resp = new TicketSummaryMetricsResponseBean();
 
-        List<Map<String, Object>> statusRows = queryForRowList("""
+        List<Map<String, Object>> activeStatusRows = queryForRowList("""
                 SELECT ticket_status, COUNT(*) AS cnt
                 FROM tickets
+                WHERE ticket_status NOT IN ('RESOLVED', 'CLOSED')
                 GROUP BY ticket_status
                 """);
 
-        Map<String, Long> statusCounts = toStatusCountMap(statusRows);
+        Map<String, Long> activeStatusCounts = toStatusCountMap(activeStatusRows);
 
-        Map<String, Object> summaryRow = queryForSingleRow("""
+        Map<String, Object> activeSummaryRow = queryForSingleRow("""
                 SELECT
                   COUNT(*) AS total_tickets,
                   COUNT(ticket_assigned_to) AS assigned_count,
-                  COUNT(*) - COUNT(ticket_assigned_to) AS unassigned_count,
+                  COUNT(*) FILTER (WHERE ticket_assigned_to IS NULL) AS unassigned_count,
                   COUNT(*) FILTER (WHERE ticket_ai_priority = 'HIGH' ) AS high_priority_count,
         		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'URGENT' ) AS urgent_priority_count
                 FROM tickets
+                WHERE ticket_status NOT IN ('RESOLVED', 'CLOSED')
+                """);
+        
+        Map<String, Object> completedSummaryRow = queryForSingleRow("""
+                SELECT                                    
+                  COUNT(*) FILTER (WHERE ticket_status = 'RESOLVED' ) AS resolved_count,
+        		  COUNT(*) FILTER (WHERE ticket_status = 'CLOSED' ) AS closed_count
+                FROM tickets                
                 """);
 
-        resp.totalTickets = getLong(summaryRow, "total_tickets");
-        resp.newCount = statusCounts.getOrDefault("NEW", 0L);
-        resp.aiProcessingCount = statusCounts.getOrDefault("AI_PROCESSING", 0L);
-        resp.vagueCount = statusCounts.getOrDefault("VAGUE", 0L);
-        resp.readyCount = statusCounts.getOrDefault("READY", 0L);
-        resp.inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
-        resp.resolvedCount = statusCounts.getOrDefault("RESOLVED", 0L);
-        resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
-        resp.assignedCount = getLong(summaryRow, "assigned_count");
-        resp.unassignedCount = getLong(summaryRow, "unassigned_count");
-        resp.highPriorityCount = getLong(summaryRow, "high_priority_count");
-        resp.urgentPriorityCount = getLong(summaryRow, "urgent_priority_count");
+        resp.totalTickets = getLong(activeSummaryRow, "total_tickets");
+        resp.newCount = activeStatusCounts.getOrDefault("NEW", 0L);
+        resp.aiProcessingCount = activeStatusCounts.getOrDefault("AI_PROCESSING", 0L);
+        resp.vagueCount = activeStatusCounts.getOrDefault("VAGUE", 0L);
+        resp.readyCount = activeStatusCounts.getOrDefault("READY", 0L);
+        resp.inProgressCount = activeStatusCounts.getOrDefault("IN_PROGRESS", 0L);
 
+        resp.assignedCount = getLong(activeSummaryRow, "assigned_count");
+        resp.unassignedCount = getLong(activeSummaryRow, "unassigned_count");
+        resp.highPriorityCount = getLong(activeSummaryRow, "high_priority_count");
+        resp.urgentPriorityCount = getLong(activeSummaryRow, "urgent_priority_count");
+
+        resp.resolvedCount = getLong(completedSummaryRow, "resolved_count");
+        resp.closedCount = getLong(completedSummaryRow, "closed_count");
+        
         return resp;
     }
 
     private TicketSummaryMetricsResponseBean buildAgentTicketSummary(Long agentUserId) {
         TicketSummaryMetricsResponseBean resp = new TicketSummaryMetricsResponseBean();
 
-        List<Map<String, Object>> statusRows = queryForRowList("""
+        List<Map<String, Object>> activeStatusRows = queryForRowList("""
                 SELECT ticket_status, COUNT(*) AS cnt
                 FROM tickets
                 WHERE ticket_assigned_to = ?
+                	AND ticket_status NOT IN ('RESOLVED', 'CLOSED')
                 GROUP BY ticket_status
                 """, agentUserId);
 
-        Map<String, Long> statusCounts = toStatusCountMap(statusRows);
+        Map<String, Long> activeStatusCounts = toStatusCountMap(activeStatusRows);
         
-        Map<String, Object> priorityRow = queryForSingleRow("""
+        Map<String, Object> activeSummaryRow = queryForSingleRow("""
         		SELECT
+        		  COUNT(*) AS total_tickets,
         		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'HIGH' ) AS high_priority_count,
         		  COUNT(*) FILTER (WHERE ticket_ai_priority = 'URGENT' ) AS urgent_priority_count
         		FROM tickets
         		WHERE ticket_assigned_to = ?
+        		    AND ticket_status NOT IN ('RESOLVED', 'CLOSED')
         		""", agentUserId);
 
-        long totalTickets = statusCounts.values().stream().mapToLong(Long::longValue).sum();
+        Map<String, Object> completedSummaryRow = queryForSingleRow("""
+                SELECT                                    
+                  COUNT(*) FILTER (WHERE ticket_status = 'RESOLVED' ) AS resolved_count,
+        		  COUNT(*) FILTER (WHERE ticket_status = 'CLOSED' ) AS closed_count
+                FROM tickets 
+                WHERE ticket_assigned_to = ?           
+                """, agentUserId);
+        
+        long totalActiveTickets = activeStatusCounts.values().stream().mapToLong(Long::longValue).sum();
 
-        resp.totalTickets = totalTickets;
-        resp.newCount = statusCounts.getOrDefault("NEW", 0L);
-        resp.aiProcessingCount = statusCounts.getOrDefault("AI_PROCESSING", 0L);
-        resp.vagueCount = statusCounts.getOrDefault("VAGUE", 0L);
-        resp.readyCount = statusCounts.getOrDefault("READY", 0L);
-        resp.inProgressCount = statusCounts.getOrDefault("IN_PROGRESS", 0L);
-        resp.resolvedCount = statusCounts.getOrDefault("RESOLVED", 0L);
-        resp.closedCount = statusCounts.getOrDefault("CLOSED", 0L);
-        resp.assignedCount = totalTickets;
+        resp.totalTickets = totalActiveTickets;
+        resp.newCount = activeStatusCounts.getOrDefault("NEW", 0L);
+        resp.aiProcessingCount = activeStatusCounts.getOrDefault("AI_PROCESSING", 0L);
+        resp.vagueCount = activeStatusCounts.getOrDefault("VAGUE", 0L);
+        resp.readyCount = activeStatusCounts.getOrDefault("READY", 0L);
+        resp.inProgressCount = activeStatusCounts.getOrDefault("IN_PROGRESS", 0L);
+        
+        resp.assignedCount = totalActiveTickets;
         resp.unassignedCount = 0L;
-        resp.highPriorityCount = getLong(priorityRow, "high_priority_count");
-        resp.urgentPriorityCount = getLong(priorityRow, "urgent_priority_count");
+        resp.highPriorityCount = getLong(activeSummaryRow, "high_priority_count");
+        resp.urgentPriorityCount = getLong(activeSummaryRow, "urgent_priority_count");
 
+        resp.resolvedCount = getLong(completedSummaryRow, "resolved_count");
+        resp.closedCount = getLong(completedSummaryRow, "closed_count");
+        
         return resp;
     }
 
