@@ -76,6 +76,11 @@ public class Ticket {
     @Column(name = "ticket_ai_last_error", columnDefinition = "text")
     private String aiLastError;
     
+    //TRIAGE_REQUEST started/claimed by worker at for processing
+    @Column(name = "ticket_current_triage_started_at")
+    private OffsetDateTime currentTriageStartedAt;
+    
+    //Successful TRIAGE_REQUEST completed at
     @Column(name = "ticket_ai_triaged_at")
     private OffsetDateTime aiTriagedAt;
 
@@ -212,6 +217,14 @@ public class Ticket {
 
 	public void setAiLastError(String aiLastError) {
 		this.aiLastError = aiLastError;
+	}
+
+	public OffsetDateTime getCurrentTriageStartedAt() {
+		return currentTriageStartedAt;
+	}
+
+	public void setCurrentTriageStartedAt(OffsetDateTime currentTriageStartedAt) {
+		this.currentTriageStartedAt = currentTriageStartedAt;
 	}
 
 	public OffsetDateTime getAiTriagedAt() {

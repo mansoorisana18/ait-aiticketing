@@ -86,6 +86,7 @@ public class TicketServiceImpl implements TicketService {
 		//Initial outbox TRIAGE values
 		t.setAiFailed(false);
 		t.setAiLastError(null);
+		t.setCurrentTriageStartedAt(null);
 		t.setAiTriagedAt(null);
 		t.setVagueCount(0);
 		t.setLastVagueAt(null);

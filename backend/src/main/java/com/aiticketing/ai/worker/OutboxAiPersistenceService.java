@@ -87,6 +87,7 @@ public class OutboxAiPersistenceService {
             ticket.setStatus(TicketStatus.AI_PROCESSING);
             ticket.setAiFailed(false);
             ticket.setAiLastError(null);
+            ticket.setCurrentTriageStartedAt(now);
             ticket.setUpdatedAt(now);
             ticketRepo.save(ticket);
         }

@@ -60,7 +60,7 @@ public class MetricsServiceImpl implements MetricsService {
                 SELECT
                   COUNT(*) AS total_tickets_created,
                   COUNT(ticket_ai_triaged_at) AS triage_completed_count,
-                  COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_ai_triaged_at - ticket_created_at))), 0) AS avg_triage_time_seconds,
+                  COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_ai_triaged_at - ticket_current_triage_started_at))), 0) AS avg_triage_time_seconds,
                   COALESCE(AVG(ticket_ai_confidence), 0) AS avg_ai_confidence,
                   COUNT(*) FILTER (
                     WHERE ticket_status = 'VAGUE'
