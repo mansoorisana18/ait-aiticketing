@@ -111,6 +111,7 @@ export default function TicketTable({ tickets, role }: Props) {
                         borderRadius: 1.5,
                         bgcolor: "rgba(245, 158, 11, 0.10)",
                         border: "1px solid rgba(245, 158, 11, 0.22)",
+                        display: "inline-block",
                       }}
                     >
                       <Typography variant="caption" sx={{ fontWeight: 700, color: "#B45309" }}>
@@ -128,6 +129,7 @@ export default function TicketTable({ tickets, role }: Props) {
                         borderRadius: 1.5,
                         bgcolor: "rgba(2, 132, 199, 0.08)",
                         border: "1px solid rgba(2, 132, 199, 0.18)",
+                        display: "inline-block",
                       }}
                     >
                       <Typography variant="caption" sx={{ fontWeight: 700, color: "#0369A1" }}>

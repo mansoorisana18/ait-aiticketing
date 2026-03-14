@@ -49,9 +49,17 @@ export default function AnalyticsPage() {
       <MetricCard
         title="Average Triage Time"
         value={formatSeconds(triage.averageTriageTimeSeconds)}
-        summary="Average time taken for the current AI triage attempt to complete."
-        interpretation="Lower times indicate the system is processing and classifying the latest ticket version more quickly."
-        calculation="Average elapsed time from the start of the current triage attempt to successful AI triage completion."
+        summary="Average time taken for a newly created ticket to complete AI triage."
+        interpretation="Lower times indicate the system is understanding and classifying tickets more quickly."
+        calculation="Average elapsed time from ticket creation to successful AI triage completion."
+      />
+
+      <MetricCard
+        title="Average AI Confidence"
+        value={formatConfidence(triage.averageAiConfidence)}
+        summary="Average confidence level of the AI across completed triage decisions."
+        interpretation="Higher values suggest the model is making triage decisions with stronger certainty."
+        calculation="Average confidence score across completed triage results."
       />
 
       <MetricCard
@@ -90,12 +98,20 @@ export default function AnalyticsPage() {
         interpretation="This shows how quickly actionable tickets move to eligible department-specific agents with the lowest workload."
         calculation="Average elapsed time from triage completion to first assignment."
       />
+
+      <MetricCard
+        title="Assignment Override Rate"
+        value={formatPercent(routing.assignmentOverrideRate)}
+        summary="Measures how often an automatically assigned ticket was later manually reassigned."
+        interpretation="A lower value suggests the routing logic is selecting the right assignee more consistently."
+        calculation="Manual assignment changes divided by auto-assigned tickets."
+      />
     </Box>
   );
 
   return (
     <Stack spacing={1.75}>
-      {/* Top band */}
+            {/* Hero band */}
       <Paper
         variant="outlined"
         sx={{
@@ -135,27 +151,10 @@ export default function AnalyticsPage() {
               }}
             >
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                Triage Success Rate
+                AI Triage Accuracy
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
-                {formatPercent(triage.triageSuccessRate)}
-              </Typography>
-            </Paper>
-
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 1.2,
-                borderRadius: 2,
-                bgcolor: alpha("#15803D", 0.06),
-                border: "1px solid rgba(21,128,61,0.14)",
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                Auto-routing Success Rate
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
-                {formatPercent(routing.autoRoutingSuccessRate)}
+                {formatPercent(triage.aiTriageAccuracy)}
               </Typography>
             </Paper>
 
@@ -169,10 +168,27 @@ export default function AnalyticsPage() {
               }}
             >
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                Average Time to Assignment
+                Average Triage Time
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
-                {formatSeconds(routing.averageTimeToAssignmentFromTriageSeconds)}
+                {formatSeconds(triage.averageTriageTimeSeconds)}
+              </Typography>
+            </Paper>
+
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 1.2,
+                borderRadius: 2,
+                bgcolor: alpha("#15803D", 0.06),
+                border: "1px solid rgba(21,128,61,0.14)",
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                Auto-routing Accuracy
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
+                {formatPercent(routing.autoRoutingAccuracy)}
               </Typography>
             </Paper>
           </Box>
@@ -190,32 +206,36 @@ export default function AnalyticsPage() {
         highlight={
           <MetricsHighlightCard
             title="Overall Triage Performance"
-            primaryLabel="Triage Success Rate"
-            primaryValue={formatPercent(triage.triageSuccessRate)}
+            primaryLabel="AI Triage Accuracy"
+            primaryValue={formatPercent(triage.aiTriageAccuracy)}
             primaryInfo={{
+              title: "AI Triage Accuracy",
+              summary: "Percentage of AI-triaged tickets that were accepted without manual correction.",
+              interpretation:
+                "A higher value means the AI's category, priority, and vague-ticket decisions are aligning more closely with human judgment.",
+              calculation:
+                "Calculated as the percentage of triaged tickets that did not later require manual admin override of category, priority, or a vague-to-non-vague status correction.",
+            }}
+            secondaryLabel="Triage Success Rate"
+            secondaryValue={formatPercent(triage.triageSuccessRate)}
+            secondaryInfo={{
               title: "Triage Success Rate",
-              summary: "Measures the number of created tickets that successfully completed AI triage.",
-              interpretation: "A higher value means the system is classifying and evaluating incoming tickets reliably.",
+              summary: "Measures the share of created tickets that successfully completed AI triage.",
+              interpretation:
+                "A higher value means the system is classifying and evaluating incoming tickets reliably.",
               calculation: "Triaged tickets divided by total created tickets.",
             }}
-            secondaryLabel="Vague Rate"
-            secondaryValue={formatPercent(triage.vagueRate)}
-            secondaryInfo={{
+            tertiaryLabel="Vague Rate"
+            tertiaryValue={formatPercent(triage.vagueRate)}
+            tertiaryInfo={{
               title: "Vague Rate",
               summary: "Measures how often tickets require more information before they can continue through automation.",
-              interpretation: "A higher value suggests more requests are arriving without enough detail for direct handling. Thus, it reduces the resolution time needed for manual clarification cycles.",
+              interpretation:
+                "A higher value suggests more requests are arriving without enough detail for direct handling.",
               calculation: "Tickets marked vague divided by triaged tickets.",
             }}
-            tertiaryLabel="Average AI Confidence"
-            tertiaryValue={formatConfidence(triage.averageAiConfidence)}
-            tertiaryInfo={{
-              title: "Average AI Confidence",
-              summary: "Shows the average confidence level of the AI across completed triage decisions.",
-              interpretation: "Higher values suggest the model is making triage decisions with stronger certainty.",
-              calculation: "Average confidence score across completed triage results.",
-            }}
-            progressValue={triage.triageSuccessRate ?? null}
-            progressLabel="Triage completion efficiency"
+            progressValue={triage.aiTriageAccuracy ?? null}
+            progressLabel="Human acceptance of AI triage decisions"
           />
         }
         cards={triageCards}
@@ -232,32 +252,36 @@ export default function AnalyticsPage() {
         highlight={
           <MetricsHighlightCard
             title="Overall Routing Performance"
-            primaryLabel="Auto-routing Success Rate"
-            primaryValue={formatPercent(routing.autoRoutingSuccessRate)}
+            primaryLabel="Auto-routing Accuracy"
+            primaryValue={formatPercent(routing.autoRoutingAccuracy)}
             primaryInfo={{
+              title: "Auto-routing Accuracy",
+              summary: "Percentage of auto-assigned routing decisions that were accepted without manual reassignment.",
+              interpretation:
+                "A higher value means the system is assigning actionable tickets to the right agent more reliably.",
+              calculation:
+                "Calculated as the percentage of auto-routed tickets with routing outcome ASSIGNED that were not later manually overridden through reassignment.",
+            }}
+            secondaryLabel="Auto-routing Success Rate"
+            secondaryValue={formatPercent(routing.autoRoutingSuccessRate)}
+            secondaryInfo={{
               title: "Auto-routing Success Rate",
               summary: "Measures the share of routing attempts that resulted in a successful automatic assignment.",
-              interpretation: "A higher value means actionable tickets are reaching the right department-agent without human intervention.",
+              interpretation:
+                "A higher value means actionable tickets are reaching the right queues without human intervention.",
               calculation: "Successful auto-assignments divided by routing attempts.",
             }}
-            secondaryLabel="No Eligible Agent Rate"
-            secondaryValue={formatPercent(routing.noEligibleAgentRate)}
-            secondaryInfo={{
+            tertiaryLabel="No Eligible Agent Rate"
+            tertiaryValue={formatPercent(routing.noEligibleAgentRate)}
+            tertiaryInfo={{
               title: "No Eligible Agent Rate",
               summary: "Measures how often routing could not assign a ticket because no suitable agent was available.",
-              interpretation: "This helps separate staffing or coverage constraints from routing automation quality issues.",
+              interpretation:
+                "This helps separate staffing or coverage constraints from routing quality issues.",
               calculation: "No-eligible-agent outcomes divided by routing attempts.",
             }}
-            tertiaryLabel="Assignment Override Rate"
-            tertiaryValue={formatPercent(routing.assignmentOverrideRate)}
-            tertiaryInfo={{
-              title: "Assignment Override Rate",
-              summary: "Measures how often an automatically assigned ticket was later manually reassigned.",
-              interpretation: "A lower value suggests the routing logic is selecting the right assignee more consistently.",
-              calculation: "Manual assignment changes divided by auto-assigned tickets.",
-            }}
-            progressValue={routing.autoRoutingSuccessRate ?? null}
-            progressLabel="Automatic assignment effectiveness"
+            progressValue={routing.autoRoutingAccuracy ?? null}
+            progressLabel="Human acceptance of automatic routing decisions"
           />
         }
         cards={routingCards}

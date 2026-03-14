@@ -212,6 +212,7 @@ export type TriageMetricsResponseBean = {
   vagueRate: number | null;
   averageAiConfidence: number | null;
   manualTriageOverrideRate: number | null;
+  aiTriageAccuracy: number | null;
 };
 
 export type RoutingMetricsResponseBean = {
@@ -220,6 +221,7 @@ export type RoutingMetricsResponseBean = {
   noEligibleAgentRate: number | null;
   averageTimeToAssignmentFromTriageSeconds: number | null;
   assignmentOverrideRate: number | null;
+  autoRoutingAccuracy: number | null;
 };
 
 export type AiSummaryMetricsResponseBean = {
