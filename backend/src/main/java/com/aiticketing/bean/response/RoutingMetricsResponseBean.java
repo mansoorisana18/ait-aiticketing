@@ -7,5 +7,6 @@ public class RoutingMetricsResponseBean {
     public Double noEligibleAgentRate;
     public Double averageTimeToAssignmentFromTriageSeconds;
     public Double assignmentOverrideRate;
+    public Double autoRoutingAccuracy;
 	
 }

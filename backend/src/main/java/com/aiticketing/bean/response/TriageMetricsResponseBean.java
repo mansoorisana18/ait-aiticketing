@@ -9,4 +9,5 @@ public class TriageMetricsResponseBean {
     public Double vagueRate;
     public Double averageAiConfidence;
     public Double manualTriageOverrideRate;
+    public Double aiTriageAccuracy;
 }

@@ -81,7 +81,15 @@ public class MetricsServiceImpl implements MetricsService {
 				WHERE ao_override_type IN ('CATEGORY', 'PRIORITY')
 				   OR (ao_override_type = 'STATUS' AND ao_old_value = 'VAGUE')
                 """);
-
+        
+        //Using all override decisions per distinct ticket because one ticket can have multiple triage override decisions but we are calculating the accuracy per last version triaged ticket and not per ticket version
+        long triageOverriddenTicketCount = queryForLongValue("""
+                SELECT COUNT(DISTINCT ao_ticket_id)
+                FROM admin_overrides
+                WHERE ao_override_type IN ('CATEGORY', 'PRIORITY')
+                   OR (ao_override_type = 'STATUS' AND ao_old_value = 'VAGUE')
+                """);
+        
         triage.totalTicketsCreated = totalTicketsCreated;
         triage.triageCompletedCount = triageCompletedCount;
         triage.triageSuccessRate = calculatePercentage(triageCompletedCount, totalTicketsCreated);
@@ -89,6 +97,8 @@ public class MetricsServiceImpl implements MetricsService {
         triage.vagueRate = calculatePercentage(vagueCount, triageCompletedCount);
         triage.averageAiConfidence = roundToFourDecimals(avgAiConfidence);
         triage.manualTriageOverrideRate = calculatePercentage(manualTriageOverrideCount, triageCompletedCount);
+        triage.aiTriageAccuracy = calculatePercentage(triageCompletedCount - triageOverriddenTicketCount, triageCompletedCount);
+        
 
         return triage;
     }
@@ -134,12 +144,20 @@ public class MetricsServiceImpl implements MetricsService {
                 WHERE ao_override_type = 'ASSIGNMENT'
                 """);
 
+        //Using all override decisions per distinct ticket because one ticket can have multiple assignment override decisions but we are calculating the accuracy per last version routed ticket and not per ticket version
+        long routingOverriddenTicketCount = queryForLongValue("""
+                SELECT COUNT(DISTINCT ao_ticket_id)
+                FROM admin_overrides
+                WHERE ao_override_type = 'ASSIGNMENT'
+                """);
+        
         routing.routingAttempts = routingAttempts;
         routing.autoRoutingSuccessRate = calculatePercentage(autoAssignedCount, routingAttempts);
         routing.noEligibleAgentRate = calculatePercentage(noEligibleAgentCount, routingAttempts);
         routing.averageTimeToAssignmentFromTriageSeconds = roundToTwoDecimals(avgTimeToAssignmentFromTriageSeconds);
         routing.assignmentOverrideRate = calculatePercentage(assignmentOverrideCount, autoAssignedCount);
-
+        routing.autoRoutingAccuracy = calculatePercentage(autoAssignedCount - routingOverriddenTicketCount, autoAssignedCount);
+        
         return routing;
     }
 
