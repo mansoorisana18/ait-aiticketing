@@ -49,9 +49,9 @@ export default function AnalyticsPage() {
       <MetricCard
         title="Average Triage Time"
         value={formatSeconds(triage.averageTriageTimeSeconds)}
-        summary="Average time taken for a newly created ticket to complete AI triage."
-        interpretation="Lower times indicate the system is understanding and classifying tickets more quickly."
-        calculation="Average elapsed time from ticket creation to successful AI triage completion."
+        summary="Average time taken for the current AI triage attempt to complete."
+        interpretation="Lower times indicate the system is processing and classifying the latest ticket version more quickly."
+        calculation="Average elapsed time from the start of the current triage attempt to successful AI triage completion."
       />
 
       <MetricCard
