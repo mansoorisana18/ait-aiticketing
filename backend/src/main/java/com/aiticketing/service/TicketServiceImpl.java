@@ -396,6 +396,11 @@ public class TicketServiceImpl implements TicketService {
 	    t.setStatus(req.status);
 	    t.setUpdatedAt(OffsetDateTime.now());
 	    ticketRepo.save(t);
+	    
+	    //DUPLICATE ticket final resolution status propagation through Primary ticket 	    
+	    if (req.status == TicketStatus.RESOLVED || req.status == TicketStatus.CLOSED) {
+	        propagateFinalStatusToConfirmedDuplicates(t, req.status, t.getAssignedTo());
+	    }
 
 //	    //Add the note as a comment when status changes
 //	    if (req.note != null && !req.note.trim().isEmpty()) {
@@ -416,7 +421,54 @@ public class TicketServiceImpl implements TicketService {
 	            resp.ticketId, resp.status);
 	    return resp;
 	}
+	
+	//If primary ticket status is changed by agent to (RESOLVED/CLOSED), we also set the same user status of its linked duplicate tickets. The internal status is DUPLICATE only of those for ADMIN/AGENT
+	//Also add a system PUBLIC comment for the duplicates
+	private void propagateFinalStatusToConfirmedDuplicates(Ticket primaryTicket, TicketStatus finalStatus, User actingUser) {
+		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in propagateFinalStatusToConfirmedDuplicates() :: agentUserId={}, ticketId={}", actingUser, primaryTicket.getTicketId());
+		List<TicketDuplicateLink> confirmedLinks =
+	            duplicateLinkRepo.findByPrimaryTicket_TicketIdAndDuplicateTypeAndLinkStatusAndPropagateResolution(
+	                    primaryTicket.getTicketId(),
+	                    DuplicateLinkType.CONFIRMED.name(),
+	                    DuplicateLinkStatus.ACTIVE.name(),
+	                    true
+	            );
 
+	    if (confirmedLinks.isEmpty()) {
+	    	TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit propagateFinalStatusToConfirmedDuplicates() :: No DUPLICATEs found for ticketId={}", primaryTicket.getTicketId());
+	        return;
+	    }
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    for (TicketDuplicateLink link : confirmedLinks) {
+	        Ticket duplicateTicket = link.getDuplicateTicket();
+	        duplicateTicket.setStatus(finalStatus);
+	        duplicateTicket.setUpdatedAt(now);
+	        ticketRepo.save(duplicateTicket);
+	        
+	        if (finalStatus == TicketStatus.RESOLVED) {
+	        	TicketComment publicComment = new TicketComment();
+	        	publicComment.setTicket(duplicateTicket);
+	        	publicComment.setAuthor(actingUser);
+	        	publicComment.setBody("This ticket was resolved as part of an existing related issue.");
+	        	publicComment.setCreatedAt(now);
+	        	publicComment.setVisibility(CommentVisibility.PUBLIC);
+		        ticketCommentRepo.save(publicComment);
+	        	
+	        	TicketComment internalComment = new TicketComment();
+	        	internalComment.setTicket(duplicateTicket);
+	        	internalComment.setAuthor(actingUser);
+	        	internalComment.setBody("This ticket was " + finalStatus.name().toLowerCase()
+		                + " through linked primary ticket #" + primaryTicket.getTicketId() + ".");
+	        	internalComment.setCreatedAt(now);
+	        	internalComment.setVisibility(CommentVisibility.INTERNAL);
+		        ticketCommentRepo.save(internalComment);
+	        }	        
+	    }
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit propagateFinalStatusToConfirmedDuplicates() :: Updated status & comment for the {} DUPLICATEs of ticketId={}", confirmedLinks.size(), primaryTicket.getTicketId());
+	}
+	
 	private boolean isAllowedAgentStatus(TicketStatus status) {
 	    return status == TicketStatus.IN_PROGRESS
 	            || status == TicketStatus.RESOLVED
@@ -434,8 +486,46 @@ public class TicketServiceImpl implements TicketService {
 	    };
 	}
 	
-	private void handleDuplicateOverride(Ticket ticket, User adminUser, AdminOverrideRequestBean requestBean) {
-	    String newDuplicateState = requestBean.newValue;
+	//For DUPLICATE CONFIRMED state tickets the user status will be same as that of its primary ticket. However, ADMIN can view DUPLICATE_REVIEW POTENTIAL state & NONE
+	private String resolveUserTicketStatus(Ticket ticket) {
+	    if (ticket == null) {
+	        return "OPEN";
+	    }
+
+	    if (ticket.getStatus() == TicketStatus.DUPLICATE
+	            && DuplicateState.CONFIRMED.name().equalsIgnoreCase(ticket.getDuplicateState())) {
+
+	        TicketDuplicateLink activeLink = duplicateLinkRepo
+	                .findByDuplicateTicket_TicketIdAndLinkStatus(
+	                        ticket.getTicketId(),
+	                        DuplicateLinkStatus.ACTIVE.name()
+	                )
+	                .stream()
+	                .filter(link -> DuplicateLinkType.CONFIRMED.name().equalsIgnoreCase(link.getDuplicateType()))
+	                .findFirst()
+	                .orElse(null);
+
+	        if (activeLink != null && activeLink.getPrimaryTicket() != null) {
+	            Ticket primaryTicket = ticketRepo.findById(activeLink.getPrimaryTicket().getTicketId())
+	                    .orElse(null);
+
+	            if (primaryTicket != null) {
+	                return Utility.mapinternalTicketStatustoUserStatus(
+	                        primaryTicket.getStatus(),
+	                        primaryTicket.getDuplicateState()
+	                );
+	            }
+	        }
+	    }
+
+	    return Utility.mapinternalTicketStatustoUserStatus(
+	            ticket.getStatus(),
+	            ticket.getDuplicateState()
+	    );
+	}
+	
+	private void handleDuplicateOverride(Ticket ticket, User adminUser, AdminOverrideRequestBean req) {
+	    String newDuplicateState = req.newValue;
 //	    String oldDuplicateState = ticket.getDuplicateState();
 	    OffsetDateTime now = OffsetDateTime.now();
 
@@ -488,7 +578,7 @@ public class TicketServiceImpl implements TicketService {
 	        }
 
 	    } else if (DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
-	        Long primaryTicketId = requestBean.referenceTicketId;
+	        Long primaryTicketId = req.referenceTicketId;
 	        if (primaryTicketId == null) {
 	            throw new BadRequestException("Primary ticket id is required when overriding duplicate to CONFIRMED");
 	        }
@@ -496,6 +586,10 @@ public class TicketServiceImpl implements TicketService {
 	        Ticket primaryTicket = ticketRepo.findById(primaryTicketId)
 	                .orElseThrow(() -> new NotFoundException("Primary ticket not found"));
 
+	        if (primaryTicket.getTicketId().equals(ticket.getTicketId())) {
+	            throw new BadRequestException("A ticket cannot be a duplicate of itself");
+	        }
+	        
 	        TicketDuplicateLink link = new TicketDuplicateLink();
 	        link.setPrimaryTicket(primaryTicket);
 	        link.setDuplicateTicket(ticket);
@@ -510,19 +604,6 @@ public class TicketServiceImpl implements TicketService {
 	        ticket.setStatus(TicketStatus.DUPLICATE);
 	        ticket.setAssignedTo(null);
 	    }
-//
-//	    ticket.setUpdatedAt(now);
-//	    ticketRepo.save(ticket);
-//
-//	    AdminOverride override = new AdminOverride();
-//	    override.setTicket(ticket);
-//	    override.setOverriddenBy(adminUser);
-//	    override.setOverrideType("DUPLICATE_LINK");
-//	    override.setOldValue(oldDuplicateState);
-//	    override.setNewValue(newDuplicateState);
-//	    override.setReason(requestBean.reason);
-//	    override.setCreatedAt(now);
-//	    adminOverrideRepo.save(override);
 	}
 	
 	private TicketCommentResponseBean mapToCommentResp(TicketComment c) {
@@ -568,9 +649,10 @@ public class TicketServiceImpl implements TicketService {
 		r.title = t.getTitle();
 		r.description = t.getDescription();
 
-		r.userTicketStatus = Utility.mapinternalTicketStatustoUserStatus(
-				t.getStatus(), t.getDuplicateState());
+//		r.userTicketStatus = Utility.mapinternalTicketStatustoUserStatus(t.getStatus(), t.getDuplicateState());
 
+		r.userTicketStatus = resolveUserTicketStatus(t);
+		
 		r.createdAt = t.getCreatedAt();
 		r.updatedAt = t.getUpdatedAt();
 
@@ -602,8 +684,8 @@ public class TicketServiceImpl implements TicketService {
 		r.description = t.getDescription();
 		r.status = t.getStatus();
 
-		r.userTicketStatus = Utility.mapinternalTicketStatustoUserStatus(
-				t.getStatus(), t.getDuplicateState());
+//		r.userTicketStatus = Utility.mapinternalTicketStatustoUserStatus(t.getStatus(), t.getDuplicateState());
+		r.userTicketStatus = resolveUserTicketStatus(t);
 
 		r.createdAt = t.getCreatedAt();
 		r.updatedAt = t.getUpdatedAt();
