@@ -24,10 +24,14 @@ import com.aiticketing.entity.AdminOverride;
 import com.aiticketing.entity.OutboxEvent;
 import com.aiticketing.entity.Ticket;
 import com.aiticketing.entity.TicketComment;
+import com.aiticketing.entity.TicketDuplicateLink;
 import com.aiticketing.entity.TicketTextVersion;
 import com.aiticketing.entity.User;
 import com.aiticketing.entity.enums.AggregateType;
 import com.aiticketing.entity.enums.CommentVisibility;
+import com.aiticketing.entity.enums.DuplicateLinkStatus;
+import com.aiticketing.entity.enums.DuplicateLinkType;
+import com.aiticketing.entity.enums.DuplicateState;
 import com.aiticketing.entity.enums.OutboxEventType;
 import com.aiticketing.entity.enums.TicketPriority;
 import com.aiticketing.entity.enums.TicketStatus;
@@ -38,6 +42,7 @@ import com.aiticketing.exception.UnauthorizedException;
 import com.aiticketing.repository.AdminOverrideRepository;
 import com.aiticketing.repository.OutboxEventRepository;
 import com.aiticketing.repository.TicketCommentRepository;
+import com.aiticketing.repository.TicketDuplicateLinkRepository;
 import com.aiticketing.repository.TicketRepository;
 import com.aiticketing.repository.TicketTextVersionRepository;
 import com.aiticketing.repository.UserRepository;
@@ -46,6 +51,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service("TicketServiceImpl")
 public class TicketServiceImpl implements TicketService {
+	
+	@Autowired
+	TicketDuplicateLinkRepository duplicateLinkRepo;
 
 	@Autowired
 	TicketTextVersionRepository ticketTextVersionRepo;
@@ -95,7 +103,7 @@ public class TicketServiceImpl implements TicketService {
 		t.setClarificationPrompt(null);
 
 		t.setCurrentTextVersion(1);
-		t.setDuplicateState("NONE");
+		t.setDuplicateState(DuplicateState.NONE.name());
 
 		OffsetDateTime now = OffsetDateTime.now();
 		t.setCreatedAt(now);
@@ -321,7 +329,8 @@ public class TicketServiceImpl implements TicketService {
 		    case "DUPLICATE_LINK" -> {
 		        String newValue = (req.newValue == null) ? "" : req.newValue.trim().toUpperCase();
 		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for DUPLICATE_LINK");
-		        ticket.setDuplicateState(newValue); // NONE/POTENTIAL/CONFIRMED
+//		        ticket.setDuplicateState(newValue); // NONE or CONFIRMED
+		        handleDuplicateOverride(ticket, admin, req);
 		        newValueForAudit = newValue;
 		    }
 		
@@ -423,6 +432,97 @@ public class TicketServiceImpl implements TicketService {
 	        case "ASSIGNMENT" -> ticket.getAssignedTo() != null ? String.valueOf(ticket.getAssignedTo().getUserId()) : null;
 	        default -> null;
 	    };
+	}
+	
+	private void handleDuplicateOverride(Ticket ticket, User adminUser, AdminOverrideRequestBean requestBean) {
+	    String newDuplicateState = requestBean.newValue;
+//	    String oldDuplicateState = ticket.getDuplicateState();
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    if (newDuplicateState == null || newDuplicateState.isBlank()) {
+	        throw new BadRequestException("New duplicate state is required for DUPLICATE_LINK override");
+	    }
+
+	    if (!DuplicateState.NONE.name().equals(newDuplicateState)
+	            && !DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
+	        throw new BadRequestException("Duplicate override only supports NONE or CONFIRMED");
+	    }
+
+	    List<TicketDuplicateLink> activeLinks =
+	            duplicateLinkRepo.findByDuplicateTicket_TicketIdAndLinkStatus(
+	                    ticket.getTicketId(),
+	                    DuplicateLinkStatus.ACTIVE.name()
+	            );
+
+	    for (TicketDuplicateLink link : activeLinks) {
+	        link.setLinkStatus(DuplicateLinkStatus.REJECTED.name());
+	    }
+	    if (!activeLinks.isEmpty()) {
+	        duplicateLinkRepo.saveAll(activeLinks);
+	    }
+
+	    if (DuplicateState.NONE.name().equals(newDuplicateState)) {
+	        ticket.setDuplicateState(DuplicateState.NONE.name());
+	        ticket.setStatus(TicketStatus.READY);
+
+	        /*
+	         * If the ticket was previously waiting in DUPLICATE_REVIEW or had been
+	         * incorrectly marked DUPLICATE, it now becomes actionable again.
+	         * Route it only if it is still unassigned.
+	         */
+	        if (ticket.getAssignedTo() == null) {
+	            OutboxEvent routingEvent = new OutboxEvent();
+	            routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
+	            routingEvent.setAggregateType(AggregateType.TICKET.name());
+	            routingEvent.setAggregateId(ticket.getTicketId());
+	            try {
+	            	routingEvent.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", ticket.getCurrentTextVersion())));
+	    	    } catch (Exception e) {
+	    	    	routingEvent.setPayload("{}");
+	    	    }
+//	            routingEvent.setPayload(toJson(Map.of("textVersion", ticket.getCurrentTextVersion())));
+	            routingEvent.setStatus("PENDING");
+	            routingEvent.setRetryCount(0);
+	            routingEvent.setCreatedAt(now);
+	            outboxEventRepo.save(routingEvent);
+	        }
+
+	    } else if (DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
+	        Long primaryTicketId = requestBean.referenceTicketId;
+	        if (primaryTicketId == null) {
+	            throw new BadRequestException("Primary ticket id is required when overriding duplicate to CONFIRMED");
+	        }
+
+	        Ticket primaryTicket = ticketRepo.findById(primaryTicketId)
+	                .orElseThrow(() -> new NotFoundException("Primary ticket not found"));
+
+	        TicketDuplicateLink link = new TicketDuplicateLink();
+	        link.setPrimaryTicket(primaryTicket);
+	        link.setDuplicateTicket(ticket);
+	        link.setSimilarity(null);
+	        link.setCreatedAt(now);
+	        link.setDuplicateType(DuplicateLinkType.CONFIRMED.name());
+	        link.setLinkStatus(DuplicateLinkStatus.ACTIVE.name());
+	        link.setPropagateResolution(true);
+	        duplicateLinkRepo.save(link);
+
+	        ticket.setDuplicateState(DuplicateState.CONFIRMED.name());
+	        ticket.setStatus(TicketStatus.DUPLICATE);
+	        ticket.setAssignedTo(null);
+	    }
+//
+//	    ticket.setUpdatedAt(now);
+//	    ticketRepo.save(ticket);
+//
+//	    AdminOverride override = new AdminOverride();
+//	    override.setTicket(ticket);
+//	    override.setOverriddenBy(adminUser);
+//	    override.setOverrideType("DUPLICATE_LINK");
+//	    override.setOldValue(oldDuplicateState);
+//	    override.setNewValue(newDuplicateState);
+//	    override.setReason(requestBean.reason);
+//	    override.setCreatedAt(now);
+//	    adminOverrideRepo.save(override);
 	}
 	
 	private TicketCommentResponseBean mapToCommentResp(TicketComment c) {

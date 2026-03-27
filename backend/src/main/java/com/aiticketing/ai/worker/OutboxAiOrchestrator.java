@@ -10,6 +10,7 @@ import com.aiticketing.ai.dto.RoutingResult;
 import com.aiticketing.ai.dto.TriageOutcome;
 import com.aiticketing.ai.dto.TriageResult;
 import com.aiticketing.ai.service.AiTriageService;
+import com.aiticketing.ai.service.DuplicateDetectionService;
 import com.aiticketing.ai.service.RoutingService;
 import com.aiticketing.entity.Ticket;
 import com.aiticketing.entity.enums.OutboxEventType;
@@ -23,18 +24,21 @@ public class OutboxAiOrchestrator {
     private final int maxRetries;
 
     private final OutboxAiPersistenceService persistenceService;
+    private final DuplicateDetectionService duplicateDetectionService;
     private final AiTriageService triageService;
     private final RoutingService routingService;
     private final TicketRepository ticketRepo;
 
     public OutboxAiOrchestrator(
             @Value("${aiticketing.ai.worker.max-retries}") int maxRetries,
+            DuplicateDetectionService duplicateDetectionService,
             OutboxAiPersistenceService persistenceService,
             AiTriageService triageService,
             RoutingService routingService,
             TicketRepository ticketRepo
     ) {
         this.maxRetries = maxRetries;
+        this.duplicateDetectionService = duplicateDetectionService;
         this.persistenceService = persistenceService;
         this.triageService = triageService;
         this.routingService = routingService;
@@ -54,6 +58,8 @@ public class OutboxAiOrchestrator {
         try {
             if (OutboxEventType.TRIAGE_REQUESTED.name().equals(work.eventType)) {            	
                 handleTriage(work);
+            } else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType)) {
+            	handleDuplicateCheck(work);
             } else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
                 handleRouting(work);
             } else {
@@ -94,6 +100,29 @@ public class OutboxAiOrchestrator {
 
         ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: handleTriage() success :: oeId={} ticketId={} category={} priority={} isVague={}",
                 work.outboxId, work.aggregateId, result.category, result.priority, result.isVague);
+    }
+    
+    private void handleDuplicateCheck(ClaimedOutboxWork work) {
+        ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: in handleDuplicateCheck() start :: oeId={} ticketId={} textVersion={}",
+                work.outboxId, work.aggregateId, work.textVersion);
+       
+        var outcome = duplicateDetectionService.checkDuplicate(
+                work.aggregateId,
+                work.textVersion,
+                work.ticketTitle,
+                work.ticketDescription
+        );
+
+        if (!outcome.success) {
+        	//Caught & call persistFailure 
+            throw new RuntimeException(outcome.error);
+        }
+        
+        //Persist success - Transaction
+        persistenceService.persistDuplicateCheckSuccess(work, outcome.result);
+
+        ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: handleDuplicateCheck() success :: oeId={} ticketId={} duplicateState={} primaryTicketId={}",
+                work.outboxId, work.aggregateId, outcome.result.duplicateState, outcome.result.primaryTicketId);
     }
 
     private void handleRouting(ClaimedOutboxWork work) {

@@ -1,0 +1,33 @@
+You are evaluating whether a newly submitted support ticket is a duplicate of one of the candidate existing tickets.
+
+Current ticket:
+- Ticket ID: {ticketId}
+- Text Version: {textVersion}
+- Title: {title}
+- Description: {description}
+
+Candidate existing tickets (JSON):
+{candidatesJson}
+
+Instructions:
+1. Choose the single best candidate primary ticket if a duplicate relationship exists.
+2. Return duplicateState as one of:
+   - NONE
+   - POTENTIAL
+   - CONFIRMED
+3. If duplicateState is NONE, primaryTicketId must be null.
+4. If duplicateState is POTENTIAL or CONFIRMED, primaryTicketId must be the best matching existing ticket ID.
+5. confidence must be between 0 and 1.
+6. similarity should reflect semantic closeness between 0 and 1 if possible.
+7. threshold should be the effective reasoning threshold you applied if possible.
+8. Give a short reason.
+
+Return strict JSON only in this exact shape:
+{
+  "duplicateState": "NONE|POTENTIAL|CONFIRMED",
+  "primaryTicketId": null,
+  "confidence": 0.0,
+  "similarity": 0.0,
+  "threshold": 0.0,
+  "reason": "..."
+}

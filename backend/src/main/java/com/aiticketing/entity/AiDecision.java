@@ -36,6 +36,12 @@ public class AiDecision {
     @Column(name = "ad_created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+	@Column(name = "ad_similarity", precision = 6, scale = 5)
+    private BigDecimal similarity;
+
+    @Column(name = "ad_threshold", precision = 6, scale = 5)
+    private BigDecimal threshold;
+
 	public Long getId() {
 		return id;
 	}
@@ -90,6 +96,23 @@ public class AiDecision {
 
 	public void setCreatedAt(OffsetDateTime createdAt) {
 		this.createdAt = createdAt;
+	}
+
+    
+    public BigDecimal getSimilarity() {
+		return similarity;
+	}
+
+	public void setSimilarity(BigDecimal similarity) {
+		this.similarity = similarity;
+	}
+
+	public BigDecimal getThreshold() {
+		return threshold;
+	}
+
+	public void setThreshold(BigDecimal threshold) {
+		this.threshold = threshold;
 	}
 
 }

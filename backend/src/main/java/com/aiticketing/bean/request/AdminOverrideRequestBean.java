@@ -19,12 +19,16 @@ public class AdminOverrideRequestBean {
     @Schema(example = "12", description = "Target agent userId or null means unassign")
     public Long newAssignedToUserId;
     
+    //Used for DUPLICATE_LINK for Override to CONFIRMED 
+    @Schema(example = "12", description = "Ticket Id whose duplicate is the current ticket")
+    public Long referenceTicketId;
+    
     @Schema(example = "Agent confirmed issue is being worked on.", description = "Optional reason for audit trail")
     @Size(max = 4000)
     public String reason;
 
     @Override
     public String toString() {
-        return "AdminOverrideRequestBean [overrideType=" + overrideType + ", newValue=" + newValue + "]";
+        return "AdminOverrideRequestBean [overrideType=" + overrideType + ", newValue=" + newValue + ", newAssignedToUserId=" + newAssignedToUserId + ", referenceTicketId=" + referenceTicketId + "]";
     }
 }

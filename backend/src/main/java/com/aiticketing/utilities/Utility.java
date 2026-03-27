@@ -11,6 +11,8 @@ public class Utility {
 	        case NEW:
 	        case AI_PROCESSING:
 	        case READY:
+	        case DUPLICATE_REVIEW:
+	        case DUPLICATE: //just a fallback for duplicate
 	            return "OPEN";
 	
 	        case VAGUE:
@@ -18,11 +20,6 @@ public class Utility {
 	
 	        case IN_PROGRESS:
 	            return "IN PROGRESS";
-	
-	        case DUPLICATE:
-	            if ("CONFIRMED".equalsIgnoreCase(duplicateState))
-	                return "CLOSED (DUPLICATE)";
-	            return "OPEN";
 	
 	        case RESOLVED:
 	            return "RESOLVED";

@@ -67,9 +67,6 @@ public class Ticket {
     @Column(name = "ticket_current_text_version", nullable = false)
     private Integer currentTextVersion;
 
-    @Column(name = "ticket_duplicate_state", nullable = false, length = 20)
-    private String duplicateState;
-
     @Column(name = "ticket_ai_failed", nullable = false)
     private Boolean aiFailed;
 
@@ -99,6 +96,15 @@ public class Ticket {
     @Column(name = "ticket_clarification_prompt", columnDefinition = "text")
     private String clarificationPrompt;
     
+    @Column(name = "ticket_duplicate_state", nullable = false, length = 20)
+    private String duplicateState;
+    
+    @Column(name = "ticket_current_duplicate_check_started_at")
+    private OffsetDateTime currentDuplicateCheckStartedAt;
+
+    @Column(name = "ticket_duplicate_checked_at")
+    private OffsetDateTime duplicateCheckedAt;
+
 	public Long getTicketId() {
 		return ticketId;
 	}
@@ -194,14 +200,6 @@ public class Ticket {
 	public void setCurrentTextVersion(Integer currentTextVersion) {
 		this.currentTextVersion = currentTextVersion;
 	}
-
-	public String getDuplicateState() {
-		return duplicateState;
-	}
-
-	public void setDuplicateState(String duplicateState) {
-		this.duplicateState = duplicateState;
-	}
 	
 	public Boolean getAiFailed() {
 		return aiFailed;
@@ -274,7 +272,31 @@ public class Ticket {
 	public void setClarificationPrompt(String clarificationPrompt) {
 		this.clarificationPrompt = clarificationPrompt;
 	}
+	
+	public String getDuplicateState() {
+		return duplicateState;
+	}
 
+	public void setDuplicateState(String duplicateState) {
+		this.duplicateState = duplicateState;
+	}
+	
+    public OffsetDateTime getCurrentDuplicateCheckStartedAt() {
+        return currentDuplicateCheckStartedAt;
+    }
+
+    public void setCurrentDuplicateCheckStartedAt(OffsetDateTime currentDuplicateCheckStartedAt) {
+        this.currentDuplicateCheckStartedAt = currentDuplicateCheckStartedAt;
+    }
+
+    public OffsetDateTime getDuplicateCheckedAt() {
+        return duplicateCheckedAt;
+    }
+
+    public void setDuplicateCheckedAt(OffsetDateTime duplicateCheckedAt) {
+        this.duplicateCheckedAt = duplicateCheckedAt;
+    }
+	
 	@Override
     public String toString() {
         return "Ticket{" +
