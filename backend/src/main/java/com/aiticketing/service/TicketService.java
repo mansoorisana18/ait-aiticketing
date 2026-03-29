@@ -8,6 +8,8 @@ import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
+import com.aiticketing.bean.response.ConfirmedDuplicateTicketResponseBean;
+import com.aiticketing.bean.response.PrimaryLinkedTicketResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
 import com.aiticketing.bean.response.TicketTextVersionResponseBean;
@@ -31,4 +33,7 @@ public interface TicketService {
 	TicketResponseBean updateTicketStatusByAgent(Long agentUserId, Long ticketId, UpdateTicketStatusRequestBean req);
 	UserTicketResponseBean clarifyVagueTicket(Long userId, Long ticketId, UpdateVagueTicketRequestBean req);
 	List<TicketTextVersionResponseBean> getTicketHistory(Long ticketId);
+
+	List<ConfirmedDuplicateTicketResponseBean> getConfirmedDuplicates(Long primaryTicketId);
+	PrimaryLinkedTicketResponseBean getPrimaryLink(Long duplicateTicketId);
 }

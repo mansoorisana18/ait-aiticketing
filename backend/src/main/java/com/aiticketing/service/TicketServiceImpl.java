@@ -16,6 +16,8 @@ import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
+import com.aiticketing.bean.response.ConfirmedDuplicateTicketResponseBean;
+import com.aiticketing.bean.response.PrimaryLinkedTicketResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
 import com.aiticketing.bean.response.TicketTextVersionResponseBean;
@@ -211,6 +213,55 @@ public class TicketServiceImpl implements TicketService {
 				agentUserId, list.size());
 		return list;
 	}
+	
+	//START - DUPLICATE CHECK
+	@Transactional(readOnly = true)
+	public List<ConfirmedDuplicateTicketResponseBean> getConfirmedDuplicates(Long primaryTicketId) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in getConfirmedDuplicates() :: primaryTicketId={}", primaryTicketId);
+
+	    ticketRepo.findById(primaryTicketId)
+	            .orElseThrow(() -> new NotFoundException("Primary ticket not found"));
+
+	    List<TicketDuplicateLink> links =
+	            duplicateLinkRepo.findByPrimaryTicket_TicketIdAndDuplicateTypeAndLinkStatus(
+	                    primaryTicketId,
+	                    DuplicateLinkType.CONFIRMED.name(),
+	                    DuplicateLinkStatus.ACTIVE.name()
+	            );
+
+	    List<ConfirmedDuplicateTicketResponseBean> resp = links.stream()
+	            .map(link -> mapToConfirmedDuplicateResp(link.getDuplicateTicket(), link))
+	            .toList();
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit getConfirmedDuplicates() :: primaryTicketId={}, count={}",
+	            primaryTicketId, resp.size());
+
+	    return resp;
+	}
+	
+	@Transactional(readOnly = true)
+	public PrimaryLinkedTicketResponseBean getPrimaryLink(Long duplicateTicketId) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in getPrimaryLink() :: duplicateTicketId={}", duplicateTicketId);
+
+	    ticketRepo.findById(duplicateTicketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    TicketDuplicateLink link = duplicateLinkRepo
+	            .findFirstByDuplicateTicket_TicketIdAndDuplicateTypeAndLinkStatus(
+	                    duplicateTicketId,
+	                    DuplicateLinkType.CONFIRMED.name(),
+	                    DuplicateLinkStatus.ACTIVE.name()
+	            )
+	            .orElseThrow(() -> new NotFoundException("No active confirmed primary link found"));
+
+	    PrimaryLinkedTicketResponseBean resp = mapToPrimaryLinkedResp(link);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit getPrimaryLink() :: duplicateTicketId={}, primaryTicketId={}",
+	            duplicateTicketId, resp.primaryTicketId);
+
+	    return resp;
+	}
+	//END - DUPLICATE CHECK
 
 	//START - Ticket Comment
 	@Transactional
@@ -330,7 +381,7 @@ public class TicketServiceImpl implements TicketService {
 		        String newValue = (req.newValue == null) ? "" : req.newValue.trim().toUpperCase();
 		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for DUPLICATE_LINK");
 //		        ticket.setDuplicateState(newValue); // NONE or CONFIRMED
-		        handleDuplicateOverride(ticket, admin, req);
+		        handleDuplicateOverride(ticket, req);
 		        newValueForAudit = newValue;
 		    }
 		
@@ -425,7 +476,7 @@ public class TicketServiceImpl implements TicketService {
 	//If primary ticket status is changed by agent to (RESOLVED/CLOSED), we also set the same user status of its linked duplicate tickets. The internal status is DUPLICATE only of those for ADMIN/AGENT
 	//Also add a system PUBLIC comment for the duplicates
 	private void propagateFinalStatusToConfirmedDuplicates(Ticket primaryTicket, TicketStatus finalStatus, User actingUser) {
-		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in propagateFinalStatusToConfirmedDuplicates() :: agentUserId={}, ticketId={}", actingUser, primaryTicket.getTicketId());
+		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in propagateFinalStatusToConfirmedDuplicates() :: agentUserId={}, ticketId={}", actingUser.getUserId(), primaryTicket.getTicketId());
 		List<TicketDuplicateLink> confirmedLinks =
 	            duplicateLinkRepo.findByPrimaryTicket_TicketIdAndDuplicateTypeAndLinkStatusAndPropagateResolution(
 	                    primaryTicket.getTicketId(),
@@ -524,9 +575,8 @@ public class TicketServiceImpl implements TicketService {
 	    );
 	}
 	
-	private void handleDuplicateOverride(Ticket ticket, User adminUser, AdminOverrideRequestBean req) {
-	    String newDuplicateState = req.newValue;
-//	    String oldDuplicateState = ticket.getDuplicateState();
+	private void handleDuplicateOverride(Ticket ticket, AdminOverrideRequestBean req) {
+	    String newDuplicateState = req.newValue == null ? null : req.newValue.trim().toUpperCase();
 	    OffsetDateTime now = OffsetDateTime.now();
 
 	    if (newDuplicateState == null || newDuplicateState.isBlank()) {
@@ -604,6 +654,51 @@ public class TicketServiceImpl implements TicketService {
 	        ticket.setStatus(TicketStatus.DUPLICATE);
 	        ticket.setAssignedTo(null);
 	    }
+	}
+	
+	private ConfirmedDuplicateTicketResponseBean mapToConfirmedDuplicateResp(Ticket duplicateTicket, TicketDuplicateLink link) {
+	    ConfirmedDuplicateTicketResponseBean r = new ConfirmedDuplicateTicketResponseBean();
+
+	    r.ticketId = duplicateTicket.getTicketId();
+	    r.title = duplicateTicket.getTitle();
+
+	    User creator = duplicateTicket.getCreatedBy();
+	    if (creator != null) {
+	        r.createdByUserId = creator.getUserId();
+	        r.createdByName = creator.getUsername();
+	        r.createdByEmail = creator.getEmail();
+	    }
+
+	    r.internalStatus = duplicateTicket.getStatus() == null ? null : duplicateTicket.getStatus().name();
+	    r.userTicketStatus = resolveUserTicketStatus(duplicateTicket);
+	    r.createdAt = duplicateTicket.getCreatedAt();
+	    r.propagateResolution = link.getPropagateResolution();
+
+	    return r;
+	}
+	
+	private PrimaryLinkedTicketResponseBean mapToPrimaryLinkedResp(TicketDuplicateLink link) {
+	    PrimaryLinkedTicketResponseBean r = new PrimaryLinkedTicketResponseBean();
+
+	    Ticket primaryTicket = link.getPrimaryTicket();
+
+	    r.primaryTicketId = primaryTicket.getTicketId();
+	    r.primaryTicketTitle = primaryTicket.getTitle();
+	    r.primaryInternalStatus = primaryTicket.getStatus() == null ? null : primaryTicket.getStatus().name();
+	    r.primaryUserTicketStatus = resolveUserTicketStatus(primaryTicket);
+
+	    User assigned = primaryTicket.getAssignedTo();
+	    if (assigned != null) {
+	        r.assignedAgentUserId = assigned.getUserId();
+	        r.assignedAgentName = assigned.getUsername();
+	        r.assignedAgentEmail = assigned.getEmail();
+	    }
+
+	    r.duplicateType = link.getDuplicateType();
+	    r.linkStatus = link.getLinkStatus();
+	    r.propagateResolution = link.getPropagateResolution();
+
+	    return r;
 	}
 	
 	private TicketCommentResponseBean mapToCommentResp(TicketComment c) {
