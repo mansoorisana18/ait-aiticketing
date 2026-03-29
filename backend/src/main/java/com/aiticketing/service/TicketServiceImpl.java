@@ -377,10 +377,10 @@ public class TicketServiceImpl implements TicketService {
 		        newValueForAudit = p.name();		    
 		    }
 		
+		    //Allowed Overrides: POTENTIAL -> NONE, POTENTIAL -> CONFIRMED, CONFIRMED -> NONE
 		    case "DUPLICATE_LINK" -> {
 		        String newValue = (req.newValue == null) ? "" : req.newValue.trim().toUpperCase();
 		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for DUPLICATE_LINK");
-//		        ticket.setDuplicateState(newValue); // NONE or CONFIRMED
 		        handleDuplicateOverride(ticket, req);
 		        newValueForAudit = newValue;
 		    }
@@ -577,8 +577,13 @@ public class TicketServiceImpl implements TicketService {
 	
 	private void handleDuplicateOverride(Ticket ticket, AdminOverrideRequestBean req) {
 	    String newDuplicateState = req.newValue == null ? null : req.newValue.trim().toUpperCase();
+	    String currentDuplicateState = ticket.getDuplicateState();
+	    TicketStatus currentStatus = ticket.getStatus();
 	    OffsetDateTime now = OffsetDateTime.now();
 
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleDuplicateOverride() :: ticketId={}, currentDuplicateState={}, currentStatus={}, requestedNewDuplicateState={}",
+	            ticket.getTicketId(), currentDuplicateState, currentStatus, newDuplicateState);
+	    
 	    if (newDuplicateState == null || newDuplicateState.isBlank()) {
 	        throw new BadRequestException("New duplicate state is required for DUPLICATE_LINK override");
 	    }
@@ -586,6 +591,23 @@ public class TicketServiceImpl implements TicketService {
 	    if (!DuplicateState.NONE.name().equals(newDuplicateState)
 	            && !DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
 	        throw new BadRequestException("Duplicate override only supports NONE or CONFIRMED");
+	    }
+	    
+	    if (currentStatus != TicketStatus.DUPLICATE_REVIEW && currentStatus != TicketStatus.DUPLICATE) {
+	        throw new BadRequestException("Duplicate override is allowed only for DUPLICATE_REVIEW or DUPLICATE tickets");
+	    }
+
+	    if (DuplicateState.POTENTIAL.name().equals(currentDuplicateState)) {
+	        if (!DuplicateState.NONE.name().equals(newDuplicateState)
+	                && !DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
+	            throw new BadRequestException("POTENTIAL duplicate can only be changed to NONE or CONFIRMED");
+	        }
+	    } else if (DuplicateState.CONFIRMED.name().equals(currentDuplicateState)) {
+	        if (!DuplicateState.NONE.name().equals(newDuplicateState)) {
+	            throw new BadRequestException("CONFIRMED duplicate can only be changed to NONE");
+	        }
+	    } else {
+	        throw new BadRequestException("DUPLICATE_LINK override is not supported when current duplicate state is " + currentDuplicateState);
 	    }
 
 	    List<TicketDuplicateLink> activeLinks =
@@ -601,6 +623,7 @@ public class TicketServiceImpl implements TicketService {
 	        duplicateLinkRepo.saveAll(activeLinks);
 	    }
 
+	    //CONFIRMED -> NONE & POTENTIAL -> NONE
 	    if (DuplicateState.NONE.name().equals(newDuplicateState)) {
 	        ticket.setDuplicateState(DuplicateState.NONE.name());
 	        ticket.setStatus(TicketStatus.READY);
@@ -608,9 +631,10 @@ public class TicketServiceImpl implements TicketService {
 	        /*
 	         * If the ticket was previously waiting in DUPLICATE_REVIEW or had been
 	         * incorrectly marked DUPLICATE, it now becomes actionable again.
-	         * Route it only if it is still unassigned.
+	         * Route it only if it is still unassigned and not RESOLVED/CLOSED
 	         */
-	        if (ticket.getAssignedTo() == null) {
+	        if (ticket.getAssignedTo() == null && ticket.getStatus() != TicketStatus.RESOLVED
+	                && ticket.getStatus() != TicketStatus.CLOSED) {
 	            OutboxEvent routingEvent = new OutboxEvent();
 	            routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
 	            routingEvent.setAggregateType(AggregateType.TICKET.name());
@@ -628,7 +652,8 @@ public class TicketServiceImpl implements TicketService {
 	        }
 
 	    } else if (DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
-	        Long primaryTicketId = req.referenceTicketId;
+	        //POTENTIAL -> CONFIRMED
+	    	Long primaryTicketId = req.referenceTicketId;
 	        if (primaryTicketId == null) {
 	            throw new BadRequestException("Primary ticket id is required when overriding duplicate to CONFIRMED");
 	        }
@@ -638,6 +663,12 @@ public class TicketServiceImpl implements TicketService {
 
 	        if (primaryTicket.getTicketId().equals(ticket.getTicketId())) {
 	            throw new BadRequestException("A ticket cannot be a duplicate of itself");
+	        }
+	        
+	        //To ensure primary ticket is only in READY or IN_PROGRESS status
+	        if (primaryTicket.getStatus() != TicketStatus.READY
+	                && primaryTicket.getStatus() != TicketStatus.IN_PROGRESS) {
+	            throw new BadRequestException("Primary ticket must be in READY or IN_PROGRESS state");
 	        }
 	        
 	        TicketDuplicateLink link = new TicketDuplicateLink();
@@ -654,6 +685,9 @@ public class TicketServiceImpl implements TicketService {
 	        ticket.setStatus(TicketStatus.DUPLICATE);
 	        ticket.setAssignedTo(null);
 	    }
+	    
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handleDuplicateOverride() :: ticketId={}, updatedDuplicateState={}, updatedStatus={}",
+	            ticket.getTicketId(), ticket.getDuplicateState(), ticket.getStatus());
 	}
 	
 	private ConfirmedDuplicateTicketResponseBean mapToConfirmedDuplicateResp(Ticket duplicateTicket, TicketDuplicateLink link) {
