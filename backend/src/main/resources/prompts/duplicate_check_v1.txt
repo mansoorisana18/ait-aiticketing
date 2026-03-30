@@ -22,7 +22,10 @@ Instructions:
 7. threshold should be the effective reasoning threshold you applied if possible.
 8. Give a short reason.
 
-Return strict JSON only in this exact shape:
+Return ONLY raw JSON.
+Do NOT wrap the JSON in markdown code fences.
+Do NOT include ```json, ```, or any explanation text.
+Return exactly one JSON object in this shape:
 {
   "duplicateState": "NONE|POTENTIAL|CONFIRMED",
   "primaryTicketId": null,

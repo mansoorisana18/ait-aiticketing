@@ -59,10 +59,10 @@ public class DuplicateDetectionService {
             List<DuplicateCandidate> candidates =
                     embeddingJdbcRepository.findTopKCandidates(ticketId, embeddingVector, 5);
             
-            DUPLICATE_LOG.info("DuplicateDetectionService :: in checkDuplicate :: Fetched duplicate candidates size={}",
+            DUPLICATE_LOG.info("DuplicateDetectionService :: in checkDuplicate() :: Fetched duplicate candidates size={}",
                     candidates.size());
             
-            //4. None of the tickets in system is worth evaluating for dupliacte check
+            //4. None of the tickets in system is worth evaluating for duplicate check
             if (candidates.isEmpty()) {
                 DuplicateCheckResult result = new DuplicateCheckResult();
                 result.duplicateState = "NONE";
@@ -85,9 +85,17 @@ public class DuplicateDetectionService {
                             "candidatesJson", objectMapper.writeValueAsString(candidates)
                     )
             );
+            
+            DUPLICATE_LOG.debug("DuplicateDetectionService :: in checkDuplicate() promptBuilt :: ticketId={} promptChars={}",
+                    ticketId, prompt.length());
 
             String raw = chatClient.prompt().user(prompt).call().content();
 
+            DUPLICATE_LOG.info("DuplicateDetectionService :: in checkDuplicate() llmResponseReceived :: ticketId={} rawChars={}",
+                    ticketId, (raw == null ? 0 : raw.length()));
+            DUPLICATE_LOG.debug("DuplicateDetectionService :: in checkDuplicate() llmResponseReceived :: ticketId={} raw={}",
+                    ticketId, raw);
+            
             if (raw == null || raw.isBlank()) {
                 return DuplicateCheckOutcome.fail("Empty duplicate-check LLM response");
             }
@@ -119,7 +127,7 @@ public class DuplicateDetectionService {
             return DuplicateCheckOutcome.ok(result);
 
         } catch (Exception ex) {
-            DUPLICATE_LOG.error("DuplicateDetectionService :: checkDuplicate failed :: ticketId={} textVersion={} err={}",
+            DUPLICATE_LOG.error("DuplicateDetectionService :: exit checkDuplicate failed :: ticketId={} textVersion={} err={}",
                     ticketId, textVersion, ex.toString(), ex);
             return DuplicateCheckOutcome.fail("Duplicate detection failed: " + ex.getMessage());
         }
