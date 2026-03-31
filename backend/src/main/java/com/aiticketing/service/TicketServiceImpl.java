@@ -30,6 +30,7 @@ import com.aiticketing.entity.TicketDuplicateLink;
 import com.aiticketing.entity.TicketTextVersion;
 import com.aiticketing.entity.User;
 import com.aiticketing.entity.enums.AggregateType;
+import com.aiticketing.entity.enums.AiDecisionType;
 import com.aiticketing.entity.enums.CommentVisibility;
 import com.aiticketing.entity.enums.DuplicateLinkStatus;
 import com.aiticketing.entity.enums.DuplicateLinkType;
@@ -42,6 +43,7 @@ import com.aiticketing.exception.BadRequestException;
 import com.aiticketing.exception.NotFoundException;
 import com.aiticketing.exception.UnauthorizedException;
 import com.aiticketing.repository.AdminOverrideRepository;
+import com.aiticketing.repository.AiDecisionRepository;
 import com.aiticketing.repository.OutboxEventRepository;
 import com.aiticketing.repository.TicketCommentRepository;
 import com.aiticketing.repository.TicketDuplicateLinkRepository;
@@ -49,10 +51,14 @@ import com.aiticketing.repository.TicketRepository;
 import com.aiticketing.repository.TicketTextVersionRepository;
 import com.aiticketing.repository.UserRepository;
 import com.aiticketing.utilities.Utility;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service("TicketServiceImpl")
 public class TicketServiceImpl implements TicketService {
+	
+	@Autowired
+	AiDecisionRepository aiDecisionRepo;
 	
 	@Autowired
 	TicketDuplicateLinkRepository duplicateLinkRepo;
@@ -588,6 +594,7 @@ public class TicketServiceImpl implements TicketService {
 	        throw new BadRequestException("New duplicate state is required for DUPLICATE_LINK override");
 	    }
 
+	  //Allowed Overrides: POTENTIAL -> NONE, POTENTIAL -> CONFIRMED, CONFIRMED -> NONE
 	    if (!DuplicateState.NONE.name().equals(newDuplicateState)
 	            && !DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
 	        throw new BadRequestException("Duplicate override only supports NONE or CONFIRMED");
@@ -610,21 +617,24 @@ public class TicketServiceImpl implements TicketService {
 	        throw new BadRequestException("DUPLICATE_LINK override is not supported when current duplicate state is " + currentDuplicateState);
 	    }
 
+	    //Fetch current active link for this duplicate ticket. Only one active row
 	    List<TicketDuplicateLink> activeLinks =
 	            duplicateLinkRepo.findByDuplicateTicket_TicketIdAndLinkStatus(
 	                    ticket.getTicketId(),
 	                    DuplicateLinkStatus.ACTIVE.name()
 	            );
 
-	    for (TicketDuplicateLink link : activeLinks) {
-	        link.setLinkStatus(DuplicateLinkStatus.REJECTED.name());
-	    }
-	    if (!activeLinks.isEmpty()) {
-	        duplicateLinkRepo.saveAll(activeLinks);
-	    }
-
 	    //CONFIRMED -> NONE & POTENTIAL -> NONE
 	    if (DuplicateState.NONE.name().equals(newDuplicateState)) {
+	    	
+	    	//Invalidate current ACTIVE row to REJECTED
+	    	for (TicketDuplicateLink link : activeLinks) {
+		        link.setLinkStatus(DuplicateLinkStatus.REJECTED.name());
+		    }
+		    if (!activeLinks.isEmpty()) {
+		        duplicateLinkRepo.saveAll(activeLinks);
+		    }
+		    		    
 	        ticket.setDuplicateState(DuplicateState.NONE.name());
 	        ticket.setStatus(TicketStatus.READY);
 
@@ -671,11 +681,32 @@ public class TicketServiceImpl implements TicketService {
 	            throw new BadRequestException("Primary ticket must be in READY or IN_PROGRESS state");
 	        }
 	        
-	        TicketDuplicateLink link = new TicketDuplicateLink();
-	        link.setPrimaryTicket(primaryTicket);
-	        link.setDuplicateTicket(ticket);
-	        link.setSimilarity(null);
-	        link.setCreatedAt(now);
+	        //1. Invalidate current ACTIVE row to REJECTED
+	    	for (TicketDuplicateLink link : activeLinks) {
+		        link.setLinkStatus(DuplicateLinkStatus.REJECTED.name());
+		    }
+		    if (!activeLinks.isEmpty()) {
+		        duplicateLinkRepo.saveAll(activeLinks);
+		    }
+		    
+		    //2. Fetch the old link row of this Primary-Duplicate pair
+		    TicketDuplicateLink link = duplicateLinkRepo
+	                .findByPrimaryTicket_TicketIdAndDuplicateTicket_TicketId(
+	                        primaryTicket.getTicketId(),
+	                        ticket.getTicketId()
+	                )
+	                .orElse(null);
+
+		    //create a row if one does not exist
+	        if (link == null) {
+	        	link = new TicketDuplicateLink();
+		        link.setPrimaryTicket(primaryTicket);
+		        link.setDuplicateTicket(ticket);
+		        link.setSimilarity(null);
+		        link.setCreatedAt(now);
+	        }
+	         
+	        //3. Now update this row with CONFIRMED and ACTIVE link status
 	        link.setDuplicateType(DuplicateLinkType.CONFIRMED.name());
 	        link.setLinkStatus(DuplicateLinkStatus.ACTIVE.name());
 	        link.setPropagateResolution(true);
@@ -733,6 +764,54 @@ public class TicketServiceImpl implements TicketService {
 	    r.propagateResolution = link.getPropagateResolution();
 
 	    return r;
+	}
+	
+	private void populateDuplicateDetails(Ticket ticket, TicketResponseBean resp) {
+		TICKET_SERVICE_LOG.debug("TicketServiceImpl :: in populateDuplicateDetails() :: ticketId={}", resp.ticketId);
+		resp.duplicateState = ticket.getDuplicateState();
+
+	    aiDecisionRepo.findFirstByTicketIdAndDecisionTypeOrderByCreatedAtDesc(
+	            ticket.getTicketId(),
+	            AiDecisionType.DUPLICATE_CHECK.name()
+	    ).ifPresent(ad -> {
+	        resp.duplicateConfidence = ad.getConfidence() == null ? null : ad.getConfidence().doubleValue();
+	        resp.duplicateSimilarity = ad.getSimilarity() == null ? null : ad.getSimilarity().doubleValue();
+
+	        try {
+	            JsonNode node = objectMapper.readTree(ad.getOutputJson());
+	            resp.duplicateReason = textOrNull(node, "reason");
+	        } catch (Exception ex) {
+	            TICKET_SERVICE_LOG.warn(
+	                    "TicketServiceImpl :: populateDuplicateDetails() :: failed to parse DUPLICATE_CHECK outputJson :: ticketId={}",
+	                    ticket.getTicketId(),
+	                    ex
+	            );
+	        }
+	    });
+
+	    duplicateLinkRepo.findFirstByDuplicateTicket_TicketIdAndLinkStatus(
+	            ticket.getTicketId(),
+	            DuplicateLinkStatus.ACTIVE.name()
+	    ).ifPresent(link -> {
+	        if (link.getPrimaryTicket() != null) {
+	            resp.primaryTicketId = link.getPrimaryTicket().getTicketId();
+	            resp.primaryTicketTitle = link.getPrimaryTicket().getTitle();
+	        }
+
+	        resp.duplicateLinkType = link.getDuplicateType();
+	        resp.duplicateLinkStatus = link.getLinkStatus();
+	        resp.propagateResolution = link.getPropagateResolution();
+	    });
+	    TICKET_SERVICE_LOG.debug("TicketServiceImpl :: exit populateDuplicateDetails() :: ticketId={}", resp.ticketId);
+	}
+	
+	private String textOrNull(JsonNode node, String field) {
+	    if (node == null || !node.has(field) || node.get(field).isNull()) {
+	        return null;
+	    }
+
+	    String value = node.get(field).asText(null);
+	    return value == null ? null : value.trim();
 	}
 	
 	private TicketCommentResponseBean mapToCommentResp(TicketComment c) {
@@ -850,6 +929,8 @@ public class TicketServiceImpl implements TicketService {
 			r.assignedToEmail = assigned.getEmail();
 		}
 
+		populateDuplicateDetails(t, r);
+		
 		TICKET_SERVICE_LOG.info(
 				"TicketServiceImpl :: exit setTicketResponseBean() :: ticketId={}, status={}, assignedToUserId={}",
 				r.ticketId, r.status, r.assignedToUserId);

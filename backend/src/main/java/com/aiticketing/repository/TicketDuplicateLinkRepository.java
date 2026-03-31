@@ -29,4 +29,15 @@ public interface TicketDuplicateLinkRepository extends JpaRepository<TicketDupli
             String duplicateType,
             String linkStatus
     );
+    
+    Optional<TicketDuplicateLink> findFirstByDuplicateTicket_TicketIdAndLinkStatus(
+            Long duplicateTicketId,
+            String linkStatus
+    );
+    
+    //Primary-Duplicate Pair fetching
+    Optional<TicketDuplicateLink> findByPrimaryTicket_TicketIdAndDuplicateTicket_TicketId(
+            Long primaryTicketId,
+            Long duplicateTicketId
+    );
 }

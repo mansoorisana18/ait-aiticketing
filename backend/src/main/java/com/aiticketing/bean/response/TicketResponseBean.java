@@ -49,6 +49,15 @@ public class TicketResponseBean {
     public Integer currentTextVersion;
     
     public String duplicateState;
+    public String duplicateReason;
+    public Double duplicateConfidence;
+    public Double duplicateSimilarity;
+    public Long primaryTicketId;
+    public String primaryTicketTitle;
+    public String duplicateLinkType;
+    public String duplicateLinkStatus;
+    public Boolean propagateResolution;
+    
 
     public OffsetDateTime createdAt;
     public OffsetDateTime updatedAt;
