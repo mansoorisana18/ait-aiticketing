@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import com.aiticketing.bean.response.AiSummaryMetricsResponseBean;
+import com.aiticketing.bean.response.DuplicateMetricsResponseBean;
 import com.aiticketing.bean.response.RoutingMetricsResponseBean;
 import com.aiticketing.bean.response.TicketSummaryMetricsResponseBean;
 import com.aiticketing.bean.response.TriageMetricsResponseBean;
@@ -32,6 +33,7 @@ public class MetricsServiceImpl implements MetricsService {
         AiSummaryMetricsResponseBean resp = new AiSummaryMetricsResponseBean();
         resp.triage = buildTriageMetrics();
         resp.routing = buildRoutingMetrics();
+        resp.duplicate = buildDuplicateMetrics();
 
         METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAdminAiSummaryMetrics()");
         return resp;
@@ -161,6 +163,112 @@ public class MetricsServiceImpl implements MetricsService {
         return routing;
     }
 
+    private DuplicateMetricsResponseBean buildDuplicateMetrics() {
+        DuplicateMetricsResponseBean duplicate = new DuplicateMetricsResponseBean();
+
+        long duplicateChecksAttempted = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM outbox_events
+                WHERE oe_event_type = 'DUPLICATE_CHECK_REQUESTED'
+                """);
+
+        long duplicateChecksSucceeded = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM outbox_events
+                WHERE oe_event_type = 'DUPLICATE_CHECK_REQUESTED'
+                  AND oe_status = 'DONE'
+                """);
+
+        double avgDuplicateCheckTimeSeconds = queryForDoubleValue("""
+                SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_duplicate_checked_at - ticket_current_duplicate_check_started_at))), 0)
+                FROM tickets
+                WHERE ticket_duplicate_checked_at IS NOT NULL
+                  AND ticket_current_duplicate_check_started_at IS NOT NULL
+                """);
+
+        long autoConfirmedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM ai_decisions
+                WHERE ad_decision_type = 'DUPLICATE_CHECK'
+                  AND ad_output_json ->> 'duplicateState' = 'CONFIRMED'
+                """);
+
+        long autoConfirmedOverturnedCount = queryForLongValue("""
+                SELECT COUNT(DISTINCT ao_ticket_id)
+                FROM admin_overrides
+                WHERE ao_override_type = 'DUPLICATE_LINK'
+                  AND ao_old_value = 'CONFIRMED'
+                  AND ao_new_value = 'NONE'
+                """);
+
+        long duplicateReviewQueueSize = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM tickets
+                WHERE ticket_status::text = 'DUPLICATE_REVIEW'
+                """);
+
+        double avgPotentialReviewTimeMinutes = queryForDoubleValue("""
+                SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ao.ao_created_at - t.ticket_duplicate_checked_at)) / 60.0), 0)
+                FROM admin_overrides ao
+                JOIN tickets t
+                  ON t.ticket_id = ao.ao_ticket_id
+                WHERE ao.ao_override_type = 'DUPLICATE_LINK'
+                  AND ao.ao_old_value = 'POTENTIAL'
+                  AND ao.ao_new_value IN ('CONFIRMED', 'NONE')
+                  AND t.ticket_duplicate_checked_at IS NOT NULL
+                """);
+
+        long reviewedPotentialCount = queryForLongValue("""
+                SELECT COUNT(DISTINCT ao_ticket_id)
+                FROM admin_overrides
+                WHERE ao_override_type = 'DUPLICATE_LINK'
+                  AND ao_old_value = 'POTENTIAL'
+                  AND ao_new_value IN ('CONFIRMED', 'NONE')
+                """);
+
+        long potentialConfirmedCount = queryForLongValue("""
+                SELECT COUNT(DISTINCT ao_ticket_id)
+                FROM admin_overrides
+                WHERE ao_override_type = 'DUPLICATE_LINK'
+                  AND ao_old_value = 'POTENTIAL'
+                  AND ao_new_value = 'CONFIRMED'
+                """);
+
+        long duplicateWorkSavedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM tickets
+                WHERE ticket_duplicate_state = 'CONFIRMED'
+                """);
+
+        long resolvedThroughPrimarCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM ticket_duplicate_links tdl
+                JOIN tickets t
+        		  ON t.ticket_id = tdl.tdl_duplicate_ticket_id
+                WHERE tdl.tdl_duplicate)type = 'CONFIRMED'
+                  AND tdl.tdl_link_status = 'ACTIVE'
+                  AND tdl.tdl_propagate_resolution = true
+                  AND t.tickt_status::text IN ('RESOLVED', 'CLOSED')                                    
+        		""");
+        
+        duplicate.duplicateChecksAttempted = duplicateChecksAttempted;
+        duplicate.duplicateCheckSuccessRate = calculatePercentage(duplicateChecksSucceeded, duplicateChecksAttempted);
+        duplicate.averageDuplicateCheckTimeSeconds = roundToTwoDecimals(avgDuplicateCheckTimeSeconds);
+
+        duplicate.autoConfirmedRate = calculatePercentage(autoConfirmedCount, duplicateChecksSucceeded);
+        duplicate.autoConfirmedAcceptanceRate =
+                calculatePercentage(autoConfirmedCount - autoConfirmedOverturnedCount, autoConfirmedCount);
+
+        duplicate.duplicateReviewQueueSize = duplicateReviewQueueSize;
+        duplicate.averagePotentialReviewTimeMinutes = roundToTwoDecimals(avgPotentialReviewTimeMinutes);
+        duplicate.potentialConfirmationRate = calculatePercentage(potentialConfirmedCount, reviewedPotentialCount);
+
+        duplicate.duplicateWorkSavedCount = duplicateWorkSavedCount;
+        duplicate.resolvedThroughPrimaryCount = resolvedThroughPrimarCount;
+
+        return duplicate;
+    }
+    
     private TicketSummaryMetricsResponseBean buildAdminTicketSummary() {
         TicketSummaryMetricsResponseBean resp = new TicketSummaryMetricsResponseBean();
 

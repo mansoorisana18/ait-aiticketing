@@ -2,8 +2,6 @@ package com.aiticketing.bean.response;
 
 import java.time.OffsetDateTime;
 
-import com.aiticketing.entity.enums.TicketStatus;
-
 import io.swagger.v3.oas.annotations.media.Schema;
 
 public class UserTicketResponseBean {

@@ -7,5 +7,5 @@ public interface MetricsService {
 	
 	AiSummaryMetricsResponseBean getAdminAiSummaryMetrics();
 	TicketSummaryMetricsResponseBean getAdminTicketSummaryMetrics();
-	TicketSummaryMetricsResponseBean getAgentTicketSummaryMetrics(Long agetUserId);	
+	TicketSummaryMetricsResponseBean getAgentTicketSummaryMetrics(Long agetUserId);
 }
