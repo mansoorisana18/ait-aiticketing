@@ -306,6 +306,9 @@ public class MetricsServiceImpl implements MetricsService {
         resp.readyCount = activeStatusCounts.getOrDefault("READY", 0L);
         resp.inProgressCount = activeStatusCounts.getOrDefault("IN_PROGRESS", 0L);
 
+        resp.duplicateReviewCount = activeStatusCounts.getOrDefault("DUPLICATE_REVIEW", 0L);
+        resp.duplicateCount = activeStatusCounts.getOrDefault("DUPLICATE", 0L);
+        
         resp.assignedCount = getLong(activeSummaryRow, "assigned_count");
         resp.unassignedCount = getLong(activeSummaryRow, "unassigned_count");
         resp.highPriorityCount = getLong(activeSummaryRow, "high_priority_count");

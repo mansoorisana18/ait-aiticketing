@@ -13,6 +13,8 @@ public class TicketSummaryMetricsResponseBean {
     public Long unassignedCount;
     public Long highPriorityCount;
     public Long urgentPriorityCount;
+    public Long duplicateReviewCount;
+    public Long duplicateCount;
     //All completed tickets in the system
     public Long resolvedCount;
     public Long closedCount;
