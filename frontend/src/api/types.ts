@@ -38,6 +38,7 @@ export type TicketStatus =
   | "AI_PROCESSING"
   | "VAGUE"
   | "READY"
+  | "DUPLICATE_REVIEW"
   | "IN_PROGRESS"
   | "DUPLICATE"
   | "RESOLVED"
@@ -98,8 +99,18 @@ export type TicketResponseBean = {
   aiPriority?: string | null;
   aiConfidence?: string | number | null;
   currentTextVersion?: number | null;
-  duplicateState?: DuplicateState | string | null;
 
+  //AI: DUPLICATE DETECTION fields
+  duplicateState?: DuplicateState | string | null;
+  duplicateReason?: string | null;
+  duplicateConfidence?: number | null;
+  duplicateSimilarity?: number | null;
+  primaryTicketId?: number | null;
+  primaryTicketTitle?: string | null;
+  duplicateLinkType?: string | null;
+  duplicateLinkStatus?: string | null;
+  propagateResolution?: boolean | null;
+  
   //AI: TRAIGE & ROUTING detail fields
   aiFailed?: boolean | null; //only for TRIAGE
   aiLastError?: string | null;
@@ -144,6 +155,7 @@ export type AdminOverrideRequestBean = {
   overrideType: AdminOverrideType;
   newValue?: string | null; //used for STATUS/CATEGORY/PRIORITY/DUPLICATE_LINK/KB_DRAFT
   newAssignedToUserId?: number | null; //used for ASSIGNMENT
+  referenceTicketId?: number | null; //used for DUPLICATE_LINK to link to the ticket that this ticket is a duplicate of
   reason?: string | null;
 };
 
@@ -187,6 +199,33 @@ export type TicketTextVersionResponseBean = {
   createdAt?: string | null;
 }
 
+//GetConfirmedDuplicates of a primary ticket visible to Admin/Agent
+export type ConfirmedDuplicateTicketResponseBean = {
+  ticketId: number;
+  title: string;
+  createdByUserId: number;
+  createdByName: string;
+  createdByEmail: string;
+  internalStatus: string;
+  userTicketStatus: string;
+  createdAt?: string | null;
+  propagateResolution?: boolean | null;
+};
+
+//GetPrimaryLink of a confirmed primary linked ticket of the given duplicate ticket
+export type PrimaryLinkedTicketResponseBean = {
+  primaryTicketId: number;
+  primaryTicketTitle: string;
+  primaryInternalStatus: string;
+  primaryUserTicketStatus: string;
+  assignedAgentUserId?: number | null;
+  assignedAgentName?: string | null;
+  assignedAgentEmail?: string | null;
+  duplicateType?: string | null;
+  linkStatus?: string | null;
+  propagateResolution?: boolean | null;
+};
+
 //Ticket summary metrics for admin & agent tickt pages
 export type TicketSummaryMetricsResponseBean = {
   totalTickets: number;
@@ -201,6 +240,8 @@ export type TicketSummaryMetricsResponseBean = {
   unassignedCount: number;
   highPriorityCount: number;
   urgentPriorityCount: number;
+  duplicateReviewCount: number;
+  duplicateCount: number;
 };
 
 //AI summary metrics for admin analytics page
@@ -224,7 +265,21 @@ export type RoutingMetricsResponseBean = {
   autoRoutingAccuracy: number | null;
 };
 
+export type DuplicateMetricsResponseBean = {
+  duplicateChecksAttempted: number;
+  duplicateCheckSuccessRate: number | null;
+  averageDuplicateCheckTimeSeconds: number | null;
+  autoConfirmedRate: number | null;
+  autoConfirmedAcceptanceRate: number | null;
+  duplicateReviewQueueSize: number;
+  averagePotentialReviewTimeMinutes: number | null;
+  potentialConfirmationRate: number | null;
+  duplicateWorkSavedCount: number;
+  resolvedThroughPrimaryCount: number;
+};
+
 export type AiSummaryMetricsResponseBean = {
   triage: TriageMetricsResponseBean;
   routing: RoutingMetricsResponseBean;
+  duplicate: DuplicateMetricsResponseBean;
 };

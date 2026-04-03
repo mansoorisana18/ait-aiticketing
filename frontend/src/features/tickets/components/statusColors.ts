@@ -1,6 +1,13 @@
 export function statusChipSx(status?: string) {
   const s = (status || "").toUpperCase();
 
+  if (s.includes("DUPLICATE_REVIEW")) {
+    return {
+      bgcolor: "#FFB703",
+      color: "#5C4300",
+    };
+  }
+  
   if (s.includes("DUPLICATE")) {
     return {
       bgcolor: "#F45D01",
