@@ -1,4 +1,3 @@
-import React from "react";
 import { Alert, Box, Paper, Stack, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useAuth } from "../../../state/AuthContext";
@@ -18,6 +17,7 @@ export default function AnalyticsPage() {
 
   const triage = data.triage;
   const routing = data.routing;
+  const duplicate = data.duplicate;
 
   const triageCards = (
     <Box
@@ -68,6 +68,67 @@ export default function AnalyticsPage() {
         summary="Share of triaged tickets that later required manual correction to AI triage output."
         interpretation="A lower rate indicates higher AI usefulness and closer alignment with human judgment."
         calculation="Overrides affecting category, priority, or vague handling divided by triaged tickets."
+      />
+    </Box>
+  );
+
+  const duplicateCards = (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: {
+          xs: "1fr",
+          md: "repeat(2, minmax(0, 1fr))",
+        },
+        gap: 1,
+      }}
+    >
+      <MetricCard
+        title="Duplicate Checks Attempted"
+        value={duplicate.duplicateChecksAttempted}
+        summary="Number of tickets processed by duplicate detection."
+        interpretation="Higher means the system is actively detecting duplicates."
+        calculation="Count of tickets for which duplicate detection was attempted."
+      />
+
+      <MetricCard
+        title="Duplicate Check Success Rate"
+        value={formatPercent(duplicate.duplicateCheckSuccessRate)}
+        summary="Percentage of duplicate checks completed successfully."
+        interpretation="Shows the reliability of the duplicate pipeline."
+        calculation="Successful duplicate checks divided by duplicate detection attempts."
+      />
+
+      <MetricCard
+        title="Average Duplicate Check Time"
+        value={formatSeconds(duplicate.averageDuplicateCheckTimeSeconds)}
+        summary="Time taken to complete duplicate detection."
+        interpretation="Lower is better."
+        calculation="Average elapsed time to complete the duplicate detection stage."
+      />
+
+      <MetricCard
+        title="Auto-Confirmed Rate"
+        value={formatPercent(duplicate.autoConfirmedRate)}
+        summary="Percentage of tickets automatically marked as duplicates."
+        interpretation="Higher means more automation."
+        calculation="Auto-confirmed duplicates divided by duplicate checks attempted."
+      />
+
+      <MetricCard
+        title="Duplicate Work Saved Count"
+        value={duplicate.duplicateWorkSavedCount}
+        summary="Number of duplicate tickets avoided from independent processing."
+        interpretation="Direct productivity gain."
+        calculation="Count of duplicate tickets consolidated instead of independently processed."
+      />
+
+      <MetricCard
+        title="Resolved Through Primary Count"
+        value={duplicate.resolvedThroughPrimaryCount}
+        summary="Duplicates resolved via primary ticket lifecycle."
+        interpretation="Shows successful consolidation."
+        calculation="Count of duplicate tickets resolved through linked primary resolution."
       />
     </Box>
   );
@@ -127,7 +188,7 @@ export default function AnalyticsPage() {
               AI Analytics Dashboard
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35, maxWidth: 880 }}>
-              This dashboard shows how effectively the AI pipeline completes triage and routes actionable work to department-specific agents.
+              This dashboard shows how effectively the AI pipeline completes triage, detects duplicates, and routes actionable work to department-specific agents.
             </Typography>
           </Box>
 
@@ -136,7 +197,7 @@ export default function AnalyticsPage() {
               display: "grid",
               gridTemplateColumns: {
                 xs: "1fr",
-                md: "repeat(3, minmax(0, 1fr))",
+                md: "repeat(4, minmax(0, 1fr))",
               },
               gap: 1,
             }}
@@ -180,8 +241,8 @@ export default function AnalyticsPage() {
               sx={{
                 p: 1.2,
                 borderRadius: 2,
-                bgcolor: alpha("#15803D", 0.06),
-                border: "1px solid rgba(21,128,61,0.14)",
+                bgcolor: alpha("#023047", 0.05),
+                border: "1px solid rgba(2,48,71,0.10)",
               }}
             >
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
@@ -189,6 +250,23 @@ export default function AnalyticsPage() {
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
                 {formatPercent(routing.autoRoutingAccuracy)}
+              </Typography>
+            </Paper>
+
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 1.2,
+                borderRadius: 2,
+                bgcolor: alpha("#023047", 0.05),
+                border: "1px solid rgba(2,48,71,0.10)",
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                Duplicate Work Saved Count
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.25 }}>
+                {duplicate.duplicateWorkSavedCount}
               </Typography>
             </Paper>
           </Box>
@@ -220,19 +298,19 @@ export default function AnalyticsPage() {
             secondaryValue={formatPercent(triage.triageSuccessRate)}
             secondaryInfo={{
               title: "Triage Success Rate",
-              summary: "Measures the share of created tickets that successfully completed AI triage.",
+              summary: "Percentage of created tickets for which AI triage completed successfully.",
               interpretation:
                 "A higher value means the system is classifying and evaluating incoming tickets reliably.",
-              calculation: "Triaged tickets divided by total created tickets.",
+              calculation: "Triage completed count divided by total tickets created in scope.",
             }}
             tertiaryLabel="Vague Rate"
             tertiaryValue={formatPercent(triage.vagueRate)}
             tertiaryInfo={{
               title: "Vague Rate",
-              summary: "Measures how often tickets require more information before they can continue through automation.",
+              summary: "Percentage of tickets that required clarification after triage.",
               interpretation:
-                "A higher value suggests more requests are arriving without enough detail for direct handling.",
-              calculation: "Tickets marked vague divided by triaged tickets.",
+                "Higher values suggest the system is frequently detecting missing or unclear ticket details.",
+              calculation: "Tickets marked as vague divided by triaged tickets.",
             }}
             progressValue={triage.aiTriageAccuracy ?? null}
             progressLabel="Human acceptance of AI triage decisions"
@@ -242,13 +320,53 @@ export default function AnalyticsPage() {
       />
 
       <MetricsSection
+        title="DUPLICATE CHECK"
+        description="After successful triage, the DUPLICATE CHECK phase evaluates each ticket for similarity, maks them as NONE, POTENTIAL for admin review, or CONFIRMED, facilitating the consolidation of repeated issues."
+        processSteps={["Duplicate Check", "Potential Review", "Confirmed Link"]}
+        highlight={
+          <MetricsHighlightCard
+            title="Duplicate Detection Overview"
+            primaryLabel="Auto-Confirmed Acceptance Rate"
+            primaryValue={formatPercent(duplicate.autoConfirmedAcceptanceRate)}
+            primaryInfo={{
+              title: "Auto-Confirmed Acceptance Rate",
+              summary: "Percentage of auto-confirmed duplicate decisions that were accepted without later manual override.",
+              interpretation:
+                "A higher value means the duplicate-detection system is making confirmed-duplicate decisions that align more closely with human judgment.",
+              calculation:
+                "Calculated as the percentage of auto-confirmed duplicate decisions that were not later overturned through admin review or override.",
+            }}
+            secondaryLabel="Duplicate Review Queue Size"
+            secondaryValue={duplicate.duplicateReviewQueueSize}
+            secondaryInfo={{
+              title: "Duplicate Review Queue Size",
+              summary: "Tickets waiting for admin review.",
+              interpretation: "Higher values indicate a growing backlog.",
+              calculation: "Count of tickets currently waiting in duplicate review.",
+            }}
+            tertiaryLabel="Potential Confirmation Rate"
+            tertiaryValue={formatPercent(duplicate.potentialConfirmationRate)}
+            tertiaryInfo={{
+              title: "Potential Confirmation Rate",
+              summary: "Percentage of POTENTIAL tickets confirmed by admin.",
+              interpretation: "Shows usefulness of AI duplicate suggestions.",
+              calculation: "Confirmed potential duplicates divided by reviewed potential duplicates.",
+            }}
+            progressValue={duplicate.autoConfirmedAcceptanceRate ?? null}
+            progressLabel="Human acceptance of duplicate decisions"
+          />
+        }
+        cards={duplicateCards}
+      />
+
+      <MetricsSection
         title="ROUTING"
         processSteps={[
           "Uses Category as Department",
           "Finds Eligible Agents",
           "Assigns Least-loaded Agent",
         ]}
-        description="After successful triage, the ROUTING phase uses the ticket category as the department key, identifies eligible agents in that department, and assigns the ticket to the least-loaded available agent."
+        description="After successful duplicate check, the ROUTING phase uses the ticket category as the department key, identifies eligible agents in that department, and assigns the NON-DUPLICATE ticket to the least-loaded available agent."
         highlight={
           <MetricsHighlightCard
             title="Overall Routing Performance"
@@ -266,19 +384,19 @@ export default function AnalyticsPage() {
             secondaryValue={formatPercent(routing.autoRoutingSuccessRate)}
             secondaryInfo={{
               title: "Auto-routing Success Rate",
-              summary: "Measures the share of routing attempts that resulted in a successful automatic assignment.",
+              summary: "Percentage of routing attempts that successfully resulted in an automatic assignment.",
               interpretation:
-                "A higher value means actionable tickets are reaching the right queues without human intervention.",
-              calculation: "Successful auto-assignments divided by routing attempts.",
+                "Higher values indicate the routing engine is successfully finding and assigning eligible agents more often.",
+              calculation: "Successful automaticassignments divided by routing attempts.",
             }}
             tertiaryLabel="No Eligible Agent Rate"
             tertiaryValue={formatPercent(routing.noEligibleAgentRate)}
             tertiaryInfo={{
               title: "No Eligible Agent Rate",
-              summary: "Measures how often routing could not assign a ticket because no suitable agent was available.",
+              summary: "Percentage of routing attempts where no eligible agent could be assigned.",
               interpretation:
-                "This helps separate staffing or coverage constraints from routing quality issues.",
-              calculation: "No-eligible-agent outcomes divided by routing attempts.",
+                "Higher values suggest staffing or department-coverage gaps are preventing assignment.",
+              calculation: "Routing attempts with no eligible agent divided by total routing attempts.",
             }}
             progressValue={routing.autoRoutingAccuracy ?? null}
             progressLabel="Human acceptance of automatic routing decisions"

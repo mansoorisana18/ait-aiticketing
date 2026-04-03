@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Box,
   Divider,
@@ -17,6 +16,7 @@ import PersonOffOutlinedIcon from "@mui/icons-material/PersonOffOutlined";
 import PriorityHighOutlinedIcon from "@mui/icons-material/PriorityHighOutlined";
 import AssignmentIndOutlinedIcon from "@mui/icons-material/AssignmentIndOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 
 type SummaryMetric = {
   label: string;
@@ -41,6 +41,24 @@ function metricVisual(label: string) {
       bg: alpha("#023047", 0.08),
       border: "1px solid rgba(2,48,71,0.12)",
       iconColor: "#023047",
+    };
+  }
+
+  if (normalized.includes("DUPLICATE REVIEW")) {
+    return {
+      icon: <ContentCopyOutlinedIcon fontSize="small" />,
+      bg: alpha("#FFB703", 0.18),
+      border: "1px solid rgba(255,183,3,0.24)",
+      iconColor: "#875F00",
+    };
+  }
+
+  if (normalized.includes("CONFIRMED DUPLICATE") || normalized.includes("DUPLICATE")) {
+    return {
+      icon: <ContentCopyOutlinedIcon fontSize="small" />,
+      bg: alpha("#FB8500", 0.12),
+      border: "1px solid rgba(251,133,0,0.20)",
+      iconColor: "#C96D00",
     };
   }
 
@@ -277,7 +295,7 @@ export default function MetricsSummaryStrip({
         sx={{
           display: "grid",
           gridTemplateColumns: hasCompleted
-            ? { xs: "1fr", xl: "1.65fr auto 0.7fr" }
+            ? { xs: "1fr", xl: "minmax(0, 2.2fr) auto minmax(220px, 0.42fr)" }
             : { xs: "1fr" },
           gap: 1.1,
           alignItems: "stretch",
