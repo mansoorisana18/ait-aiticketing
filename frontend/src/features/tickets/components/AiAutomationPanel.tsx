@@ -17,15 +17,7 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 
 import type { TicketResponseBean } from "../../../api/types";
 import { formatDateTime } from "../../../utils/dateTime";
-
-function parseConfidence(aiConfidence: TicketResponseBean["aiConfidence"]): string {
-  if (aiConfidence == null) return "—";
-  const n = typeof aiConfidence === "string" ? Number(aiConfidence) : aiConfidence;
-  if (Number.isNaN(n)) return "—";
-  if (n <= 1) return `${Math.round(n * 100)}%`;
-  if (n <= 100) return `${Math.round(n)}%`;
-  return "—";
-}
+import { formatConfidence, formatSimilarity } from "../../../utils/metricsFormat";
 
 /** Reusable value line inside each AI pipeline stage card. */
 function InfoLine({
@@ -202,25 +194,70 @@ export default function AiAutomationPanel({
   ticket,
   onOpenTextHistory,
   hasTextHistory,
+  onOpenPrimaryLink,
+  onOpenConfirmedDuplicates,
+  disablePrimaryLinkAction = false,
+  disableConfirmedDuplicatesAction = false,
   hideSectionHeader = false,
 }: {
   ticket: TicketResponseBean;
   onOpenTextHistory?: () => void;
   hasTextHistory?: boolean;
+  onOpenPrimaryLink?: () => void;
+  onOpenConfirmedDuplicates?: () => void;
+  disablePrimaryLinkAction?: boolean;
+  disableConfirmedDuplicatesAction?: boolean;
   hideSectionHeader?: boolean;
 }) {
-  const confidence = parseConfidence(ticket.aiConfidence);
   const duplicateState = (ticket.duplicateState ?? "NONE").toString().toUpperCase();
 
-  // Pipeline state calculation.
+  //Pipeline state calculation.
   const classificationFailed = Boolean(ticket.aiFailed);
   const classificationReady = Boolean(ticket.aiCategory || ticket.aiPriority || ticket.aiTriagedAt);
   const vagueActive =
     ticket.status === "VAGUE" ||
     Boolean(ticket.vagueReason) ||
     Boolean(ticket.clarificationPrompt);
-  const routingReady = Boolean(ticket.assignedToName || ticket.firstAssignedAt);
-  const duplicateSignalPresent = duplicateState !== "NONE";
+
+  const routingStatusLabel =
+    duplicateState === "CONFIRMED"
+      ? "Skipped"
+      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
+      ? "Waiting on review"
+      : ticket.assignedToName || ticket.firstAssignedAt
+      ? "Completed"
+      : "Pending";
+
+  const routingStatusTone =
+    duplicateState === "CONFIRMED"
+      ? "default"
+      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
+      ? "warning"
+      : ticket.assignedToName || ticket.firstAssignedAt
+      ? "success"
+      : "info";
+  
+  const duplicatePending = ticket.status == "NEW" || ticket.status === "AI_PROCESSING" || ticket.status === "VAGUE";
+  
+  const duplicateAwaitingReview = ticket.status === "DUPLICATE_REVIEW" || duplicateState === "POTENTIAL";
+
+  const duplicateStatusLabel =
+    duplicateState === "CONFIRMED"
+      ? "Confirmed duplicate"
+      : duplicateAwaitingReview
+      ? "Needs review"
+      : duplicatePending
+      ? "Pending"
+      : "No duplicate found";
+
+  const duplicateStatusTone =
+    duplicateState === "CONFIRMED"
+      ? "info"
+      : duplicateAwaitingReview
+      ? "warning"
+      : duplicatePending
+      ? "info"
+      : "success";
 
   return (
     <Stack spacing={0.9}>
@@ -228,7 +265,7 @@ export default function AiAutomationPanel({
         <Box>
           <Typography sx={{ fontWeight: 1000, mb: 0.1 }}>AI Automation Journey</Typography>
           <Typography variant="body2" color="text.secondary">
-            Core AI triage stages for classification, vague detection, routing, and future automation.
+            Core AI triage stages for classification, vague detection, duplicate detection, routing, and future automation.
           </Typography>
         </Box>
       )}
@@ -255,7 +292,7 @@ export default function AiAutomationPanel({
         >
           <InfoLine label="Detected category" value={ticket.aiCategory ?? "Not available"} />
           <InfoLine label="Assigned priority" value={ticket.aiPriority ?? "Not available"} />
-          <InfoLine label="Model confidence" value={confidence} />
+          <InfoLine label="Model confidence" value={formatConfidence(ticket.aiConfidence ?? null)} />
           <InfoLine label="AI analyzed on" value={formatDateTime(ticket.aiTriagedAt)} />
           {ticket.aiLastError && (
             <InfoLine label="Latest AI issue" value={ticket.aiLastError} multiline />
@@ -305,29 +342,90 @@ export default function AiAutomationPanel({
 
         <StageCard
           stepNo={3}
-          title="Routing"
-          icon={<RouteOutlinedIcon fontSize="small" />}
-          statusLabel={routingReady ? "Completed" : "Pending"}
-          statusTone={routingReady ? "success" : "info"}
+          title="Duplicate Detection"
+          icon={<ContentCopyOutlinedIcon fontSize="small" />}
+          statusLabel={duplicateStatusLabel}         
+          statusTone={duplicateStatusTone}
+          action={
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onOpenPrimaryLink}
+                disabled={disablePrimaryLinkAction}
+              >
+                View primary ticket
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onOpenConfirmedDuplicates}
+                disabled={disableConfirmedDuplicatesAction}
+              >
+                View confirmed duplicates
+              </Button>
+            </Stack>
+          }
         >
-          <InfoLine label="Assigned to" value={ticket.assignedToName ?? "Unassigned"} />
-          <InfoLine label="First assigned on" value={formatDateTime(ticket.firstAssignedAt)} />
-          <InfoLine label="Current internal status" value={ticket.status ?? "—"} />
+          <InfoLine
+            label="Duplicate state"
+            value={
+              duplicatePending
+                ? "Pending"
+                : duplicateAwaitingReview
+                ? "POTENTIAL"
+                : duplicateState
+            }
+          />
+          <InfoLine
+            label="Reason"
+            value={
+              duplicatePending
+                ? "Duplicate detection has not run yet because the ticket is still in triage or waiting for clarification."
+                : duplicateAwaitingReview
+                ? ticket.duplicateReason ?? "This ticket has been flagged for duplicate review."
+                : ticket.duplicateReason ?? "No duplicate concern detected."
+            }
+            multiline
+          />
+          <InfoLine
+            label="Confidence"
+            value={formatConfidence(ticket.duplicateConfidence ?? null)}
+          />
+          <InfoLine label="Similarity" value={formatSimilarity(ticket.duplicateSimilarity ?? null)} />
+          <InfoLine
+            label="Primary ticket"
+            value={
+              ticket.primaryTicketId
+                ? `${ticket.primaryTicketTitle ?? "Ticket"} (Ticket #${ticket.primaryTicketId})`
+                : "Not linked"
+            }
+          />
+          <InfoLine label="Link type" value={ticket.duplicateLinkType ?? "—"} />
+          <InfoLine label="Link status" value={ticket.duplicateLinkStatus ?? "—"} />
         </StageCard>
 
         <StageCard
           stepNo={4}
-          title="Duplicate Detection"
-          icon={<ContentCopyOutlinedIcon fontSize="small" />}
-          statusLabel="TO DO"
-          // statusLabel={duplicateSignalPresent ? "Flag available" : "In progress"}
-          statusTone={duplicateSignalPresent ? "info" : "default"}
-          muted
+          title="Routing"
+          icon={<RouteOutlinedIcon fontSize="small" />}
+          statusLabel={routingStatusLabel}
+          statusTone={routingStatusTone}
         >
-          <InfoLine label="Duplicate review result" value={duplicateState} />
+          <InfoLine label="Assigned to" value={ticket.assignedToName ?? "Unassigned"} />
+          <InfoLine label="First assigned on" value={formatDateTime(ticket.firstAssignedAt)} />
+          <InfoLine label="Current internal status" value={ticket.status ?? "—"} />
           <InfoLine
-            label="Workflow note"
-            value="Duplicate detection possible values NONE, POTENTIAL, CONFIRMED"
+            label="Routing outcome"
+            value={
+              duplicateState === "CONFIRMED"
+                ? "Routing not needed because this ticket is linked to a primary ticket."
+                : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
+                ? "Routing is waiting for the duplicate review decision."
+                : ticket.assignedToName || ticket.firstAssignedAt
+                ? "Routing completed successfully."
+                : "Routing has not yet been performed."
+            }
             multiline
           />
         </StageCard>

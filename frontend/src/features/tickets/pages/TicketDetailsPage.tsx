@@ -31,6 +31,7 @@ import { useAuth } from "../../../state/AuthContext";
 import LoadingSkeleton from "../../../components/LoadingSkeleton";
 import { statusChipSx } from "../components/statusColors";
 import AiAutomationPanel from "../components/AiAutomationPanel";
+import DuplicateReviewPanel from "../components/DuplicateReviewPanel";
 import TicketDetailsComments from "../components/TicketDetailsComments";
 import TicketTextHistoryPanel from "../components/TicketTextHistoryPanel";
 import VagueClarificationPanel from "../components/VagueClarificationPanel";
@@ -50,6 +51,8 @@ import {
   useAdminOverride,
   useAgentUpdateStatus,
   useClarifyVagueTicket,
+  useConfirmedDuplicates,
+  usePrimaryLink,
   useTicketDetailsInternal,
   useTicketDetailsUser,
   useTicketTextVersionHistory,
@@ -60,6 +63,7 @@ const INTERNAL_STATUS_OPTIONS: TicketStatus[] = [
   "AI_PROCESSING",
   "VAGUE",
   "READY",
+  "DUPLICATE_REVIEW",
   "IN_PROGRESS",
   "DUPLICATE",
   "RESOLVED",
@@ -91,7 +95,7 @@ const CATEGORY_OPTIONS: Department[] = [
 ];
 
 const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"];
-const DUPLICATE_STATE_OPTIONS = ["NONE", "POTENTIAL", "CONFIRMED"];
+const DUPLICATE_OVERRIDE_OPTIONS = ["NONE"];
 
 /** Shared band/card styling */
 const CARD_SX = {
@@ -181,12 +185,12 @@ function SummaryChip({
 }) {
   const sxMap = {
     success: {
-      bgcolor: alpha("#15803D", 0.10),
+      bgcolor: alpha("#15803D", 0.1),
       color: "#15803D",
       border: "1px solid rgba(21,128,61,0.18)",
     },
     warning: {
-      bgcolor: alpha("#FFB703", 0.20),
+      bgcolor: alpha("#FFB703", 0.2),
       color: "#875F00",
       border: "1px solid rgba(255,183,3,0.28)",
     },
@@ -196,7 +200,7 @@ function SummaryChip({
       border: "1px solid rgba(33,158,188,0.18)",
     },
     error: {
-      bgcolor: alpha("#C62828", 0.10),
+      bgcolor: alpha("#C62828", 0.1),
       color: "#C62828",
       border: "1px solid rgba(198,40,40,0.18)",
     },
@@ -229,10 +233,10 @@ export default function TicketDetailsPage() {
   const userQuery = useTicketDetailsUser(idNum, Boolean(isUser && auth.token));
   const internalQuery = useTicketDetailsInternal(idNum, Boolean(!isUser && auth.token));
 
-  const isLoading = isUser ? userQuery.isLoading : internalQuery.isLoading;
-
   const userTicket = userQuery.data as UserTicketResponseBean | undefined;
   const internalTicket = internalQuery.data as TicketResponseBean | undefined;
+
+  const duplicateState = (internalTicket?.duplicateState ?? "NONE").toString().toUpperCase();
 
   const clarifyMutation = useClarifyVagueTicket(idNum ?? -1);
 
@@ -244,13 +248,20 @@ export default function TicketDetailsPage() {
   const [overrideType, setOverrideType] = React.useState<AdminOverrideType>("STATUS");
   const [newValue, setNewValue] = React.useState<string>("");
   const [newAssignedToUserId, setNewAssignedToUserId] = React.useState<number | null>(null);
+  const [referenceTicketId, setReferenceTicketId] = React.useState<number | null>(null);
   const [reason, setReason] = React.useState<string>("");
 
+  const [lastAdminAction, setLastAdminAction] = React.useState<
+    "duplicate_review" | "admin_override" | null
+  >(null);
+  
   /** Band 3 AI journey accordion state to be expanded by default */
   const [aiExpanded, setAiExpanded] = React.useState(true);
 
   /** Dialog for text history which will be opened only from Vague Detection stage action. */
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [primaryLinkOpen, setPrimaryLinkOpen] = React.useState(false);
+  const [confirmedDuplicatesOpen, setConfirmedDuplicatesOpen] = React.useState(false);
 
   /** Ref used so the Band 2 "View full journey" button expands and scrolls to Band 3. */
   const aiJourneyRef = React.useRef<HTMLDivElement | null>(null);
@@ -259,6 +270,18 @@ export default function TicketDetailsPage() {
     idNum,
     Boolean(idNum && auth.token && (isAdmin || isAgent))
   );
+
+  const primaryLinkQuery = usePrimaryLink(
+    idNum,
+    Boolean(idNum && auth.token && !isUser && primaryLinkOpen && duplicateState === "CONFIRMED")
+  );
+
+  const confirmedDuplicatesQuery = useConfirmedDuplicates(
+    idNum,
+    Boolean(idNum && auth.token && !isUser && confirmedDuplicatesOpen)
+  );
+
+  const isLoading = isUser ? userQuery.isLoading : internalQuery.isLoading;
 
   React.useEffect(() => {
     if (!internalTicket) return;
@@ -277,13 +300,30 @@ export default function TicketDetailsPage() {
       if (overrideType === "CATEGORY") setNewValue(internalTicket.aiCategory ?? "");
       if (overrideType === "PRIORITY") setNewValue(internalTicket.aiPriority ?? "");
       if (overrideType === "DUPLICATE_LINK") {
-        setNewValue((internalTicket.duplicateState ?? "").toString());
+        setNewValue("");
+        setReferenceTicketId(null);
       }
       if (overrideType === "ASSIGNMENT") {
         setNewAssignedToUserId(internalTicket.assignedToUserId ?? null);
       }
     }
   }, [internalTicket, isAgent, isAdmin, overrideType]);
+
+  React.useEffect(() => {
+    if (
+      isAdmin &&
+      internalTicket?.duplicateState === "POTENTIAL" &&
+      referenceTicketId == null &&
+      internalTicket.primaryTicketId != null
+    ) {
+      setReferenceTicketId(internalTicket.primaryTicketId);
+    }
+  }, [
+    isAdmin,
+    internalTicket?.duplicateState,
+    internalTicket?.primaryTicketId,
+    referenceTicketId,
+  ]);
 
   if (isLoading) return <LoadingSkeleton variant="detail" />;
   if (!idNum) return <Typography>Invalid ticket id.</Typography>;
@@ -324,6 +364,21 @@ export default function TicketDetailsPage() {
   const submitAdminOverride = async () => {
     if (!isAdmin || !idNum) return;
 
+    if (overrideType === "DUPLICATE_LINK") {
+      const currentDuplicateState = (internalTicketData?.duplicateState ?? "")
+        .toString()
+        .toUpperCase();
+
+      const isAllowedDuplicateOverride =
+        currentDuplicateState === "CONFIRMED" && newValue === "NONE";
+
+      if (!isAllowedDuplicateOverride) {
+        return;
+      }
+    }
+
+    setLastAdminAction("admin_override");
+
     const payload: AdminOverrideRequestBean = {
       overrideType,
       reason: reason.trim() || null,
@@ -337,6 +392,39 @@ export default function TicketDetailsPage() {
 
     await adminOverride.mutateAsync(payload);
     setReason("");
+  };
+
+  const submitConfirmDuplicate = async () => {
+    if (!isAdmin || !idNum || referenceTicketId == null) return;
+
+    setLastAdminAction("duplicate_review");
+
+    const payload: AdminOverrideRequestBean = {
+      overrideType: "DUPLICATE_LINK",
+      newValue: "CONFIRMED",
+      referenceTicketId,
+      reason: reason.trim() || null,
+    };
+
+    await adminOverride.mutateAsync(payload);
+    setReason("");
+    setReferenceTicketId(null);
+  };
+
+  const submitMarkNotDuplicate = async () => {
+    if (!isAdmin || !idNum) return;
+
+    setLastAdminAction("duplicate_review");
+
+    const payload: AdminOverrideRequestBean = {
+      overrideType: "DUPLICATE_LINK",
+      newValue: "NONE",
+      reason: reason.trim() || null,
+    };
+
+    await adminOverride.mutateAsync(payload);
+    setReason("");
+    setReferenceTicketId(null);
   };
 
   const renderOverrideNewValueField = () => {
@@ -412,6 +500,19 @@ export default function TicketDetailsPage() {
     }
 
     if (overrideType === "DUPLICATE_LINK") {
+      const canOverrideConfirmedDuplicate =
+        (internalTicketData?.duplicateState ?? "").toString().toUpperCase() === "CONFIRMED";
+
+      if (!canOverrideConfirmedDuplicate) {
+        return (
+          <Alert severity="info">
+            Duplicate override is available here only for reverting a confirmed duplicate back to
+            NONE. Potential duplicate review should be handled using the Duplicate Review Action
+            panel.
+          </Alert>
+        );
+      }
+
       return (
         <TextField
           select
@@ -419,9 +520,10 @@ export default function TicketDetailsPage() {
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
           size="small"
+          helperText="Only CONFIRMED → NONE is supported through the generic override panel."
         >
           <MenuItem value="">—</MenuItem>
-          {DUPLICATE_STATE_OPTIONS.map((d) => (
+          {DUPLICATE_OVERRIDE_OPTIONS.map((d) => (
             <MenuItem key={d} value={d}>
               {d}
             </MenuItem>
@@ -444,22 +546,29 @@ export default function TicketDetailsPage() {
 
   //AI summary strip logic used in Band 2.
   const classificationFailed = Boolean(internalTicketData?.aiFailed);
-  const classificationReady = Boolean(
-    // internalTicketData?.aiCategory ||
-    //   internalTicketData?.aiPriority ||
-      internalTicketData?.aiTriagedAt
-  );
+  const classificationReady = Boolean(internalTicketData?.aiTriagedAt);
   const vagueActive =
     internalTicketData?.status === "VAGUE" ||
     Boolean(internalTicketData?.vagueReason) ||
     Boolean(internalTicketData?.clarificationPrompt);
-  const routingReady = Boolean(
-    internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
-  );
 
-  /* 
-  const duplicateState = (internalTicketData?.duplicateState ?? "NONE").toString().toUpperCase();
-  const duplicatePartial = true; */
+  const routingSummaryLabel =
+    duplicateState === "CONFIRMED"
+      ? "Routing skipped"
+      : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
+      ? "Routing waiting on review"
+      : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
+      ? "Routing completed"
+      : "Routing pending";
+
+  const routingSummaryTone =
+    duplicateState === "CONFIRMED"
+      ? "default"
+      : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
+      ? "warning"
+      : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
+      ? "success"
+      : "info";
 
   const openAndScrollToJourney = () => {
     setAiExpanded(true);
@@ -572,6 +681,28 @@ export default function TicketDetailsPage() {
           </>
         ) : (
           <>
+            <Paper variant="outlined" sx={CARD_SX}>
+              <Typography sx={{ fontWeight: 900, mb: 0.4 }}>Description</Typography>
+              <Typography sx={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                {internalTicketData!.description ?? ""}
+              </Typography>
+            </Paper>
+
+            {isAdmin && duplicateState === "POTENTIAL" && (
+              <DuplicateReviewPanel
+                referenceTicketId={referenceTicketId}
+                suggestedPrimaryTicketId={internalTicketData?.primaryTicketId ?? null}
+                suggestedPrimaryTicketTitle={internalTicketData?.primaryTicketTitle ?? null}
+                onReferenceTicketIdChange={setReferenceTicketId}
+                reason={reason}
+                onReasonChange={setReason}
+                onConfirmDuplicate={submitConfirmDuplicate}
+                onMarkNotDuplicate={submitMarkNotDuplicate}
+                isSubmitting={adminOverride.isPending}
+                isError={adminOverride.isError && lastAdminAction === "duplicate_review"}
+                isSuccess={adminOverride.isSuccess && lastAdminAction === "duplicate_review"}
+              />
+            )}
             {/* =========================
                Band 2:
                Left = Description + compact AI summary
@@ -586,13 +717,6 @@ export default function TicketDetailsPage() {
               }}
             >
               <Stack spacing={1.1}>
-                <Paper variant="outlined" sx={CARD_SX}>
-                  <Typography sx={{ fontWeight: 900, mb: 0.4 }}>Description</Typography>
-                  <Typography sx={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                    {internalTicketData!.description ?? ""}
-                  </Typography>
-                </Paper>
-
                 <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
                   <Typography sx={{ fontWeight: 900, mb: 0.65 }}>AI Summary</Typography>
 
@@ -622,19 +746,35 @@ export default function TicketDetailsPage() {
                       icon={vagueActive ? <HelpOutlineIcon /> : <CheckCircleOutlineIcon />}
                     />
                     <SummaryChip
-                      label={routingReady ? "Routing completed" : "Routing pending"}
-                      tone={routingReady ? "success" : "info"}
-                      icon={routingReady ? <CheckCircleOutlineIcon /> : <AutorenewIcon />}
-                    />
-                    {/* <SummaryChip
                       label={
-                        duplicateState !== "NONE"
-                          ? `Duplicate: ${duplicateState}`
-                          : "Duplicate partial"
+                        duplicateState === "CONFIRMED"
+                          ? "Confirmed duplicate"
+                          : duplicateState === "POTENTIAL"
+                          ? "Potential duplicate"
+                          : "No duplicate found"
                       }
-                      tone={duplicatePartial ? "default" : "info"}
+                      tone={
+                        duplicateState === "CONFIRMED"
+                          ? "info"
+                          : duplicateState === "POTENTIAL"
+                          ? "warning"
+                          : "success"
+                      }
                       icon={<ContentCopyOutlinedIcon />}
-                    /> */}
+                    />
+                    <SummaryChip
+                      label={routingSummaryLabel}
+                      tone={routingSummaryTone}
+                      icon={
+                        routingSummaryTone === "success" ? (
+                          <CheckCircleOutlineIcon />
+                        ) : routingSummaryTone === "warning" ? (
+                          <HelpOutlineIcon />
+                        ) : (
+                          <AutorenewIcon />
+                        )
+                      }
+                    />
                   </Stack>
 
                   <Button variant="outlined" onClick={openAndScrollToJourney}>
@@ -649,15 +789,23 @@ export default function TicketDetailsPage() {
                   <Stack spacing={0.6}>
                     <CompactInfoRow label="Category" value={internalTicketData?.aiCategory ?? "—"} />
                     <CompactInfoRow label="Priority" value={internalTicketData?.aiPriority ?? "—"} />
+                    <CompactInfoRow label="Duplicate State" value={duplicateState} />
                     <CompactInfoRow
-                      label="Duplicate"
-                      value={(internalTicketData?.duplicateState ?? "NONE").toString()}
+                      label="Primary Ticket"
+                      value={
+                        internalTicketData?.primaryTicketId
+                          ? `${internalTicketData.primaryTicketTitle ?? "Ticket"} (Ticket #${internalTicketData.primaryTicketId})`
+                          : "Not linked"
+                      }
                     />
                     <CompactInfoRow
                       label="Assignee"
                       value={internalTicketData?.assignedToName ?? "Unassigned"}
                     />
-                    <CompactInfoRow label="Internal Status" value={internalTicketData?.status ?? "—"} />
+                    <CompactInfoRow
+                      label="Internal Status"
+                      value={internalTicketData?.status ?? "—"}
+                    />
                   </Stack>
                 </Paper>
 
@@ -678,7 +826,9 @@ export default function TicketDetailsPage() {
                           setOverrideType(t);
                           setNewValue("");
                           setNewAssignedToUserId(null);
+                          setReferenceTicketId(null);
                           setReason("");
+                          setLastAdminAction(null);
                         }}
                         size="small"
                       >
@@ -703,15 +853,23 @@ export default function TicketDetailsPage() {
                       <Button
                         variant="contained"
                         onClick={submitAdminOverride}
-                        disabled={adminOverride.isPending}
+                        disabled={
+                          adminOverride.isPending ||
+                          (overrideType === "DUPLICATE_LINK" &&
+                            !(
+                              (internalTicketData?.duplicateState ?? "")
+                                .toString()
+                                .toUpperCase() === "CONFIRMED" && newValue === "NONE"
+                            ))
+                        }
                       >
                         {adminOverride.isPending ? "Applying..." : "Apply Override"}
                       </Button>
 
-                      {adminOverride.isError && (
+                      {adminOverride.isError && lastAdminAction === "admin_override" && (
                         <Alert severity="error">Failed to apply override.</Alert>
                       )}
-                      {adminOverride.isSuccess && (
+                      {adminOverride.isSuccess && lastAdminAction === "admin_override" && (
                         <Alert severity="success">Override applied.</Alert>
                       )}
                     </Stack>
@@ -769,8 +927,9 @@ export default function TicketDetailsPage() {
             </Box>
 
             {/* =========================
-               Band 3: Expandable full AI journey
-               ========================= */}
+              Band 3: Expandable full AI journey
+            ========================= */}
+            
             <Box ref={aiJourneyRef}>
               <Accordion
                 expanded={aiExpanded}
@@ -794,6 +953,10 @@ export default function TicketDetailsPage() {
                     ticket={internalTicketData!}
                     onOpenTextHistory={() => setHistoryOpen(true)}
                     hasTextHistory={(textHistoryQuery.data?.length ?? 0) > 0}
+                    onOpenPrimaryLink={() => setPrimaryLinkOpen(true)}
+                    onOpenConfirmedDuplicates={() => setConfirmedDuplicatesOpen(true)}
+                    disablePrimaryLinkAction={duplicateState !== "CONFIRMED"}
+                    disableConfirmedDuplicatesAction={false}
                     hideSectionHeader
                   />
                 </AccordionDetails>
@@ -808,32 +971,153 @@ export default function TicketDetailsPage() {
       </Stack>
 
       {!isUser && (
-        <Dialog
-          open={historyOpen}
-          onClose={() => setHistoryOpen(false)}
-          maxWidth="md"
-          fullWidth
-          scroll="paper"
-        >
-          <DialogTitle sx={{ pr: 6, position: "relative" }}>
-            Ticket Text Version History
-            <IconButton
-              aria-label="close"
-              onClick={() => setHistoryOpen(false)}
-              sx={{ position: "absolute", right: 10, top: 10, color: "inherit" }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
+        <>
+          <Dialog
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            maxWidth="md"
+            fullWidth
+            scroll="paper"
+          >
+            <DialogTitle sx={{ pr: 6, position: "relative" }}>
+              Ticket Text Version History
+              <IconButton
+                aria-label="close"
+                onClick={() => setHistoryOpen(false)}
+                sx={{ position: "absolute", right: 10, top: 10, color: "inherit" }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
 
-          <DialogContent sx={{ px: 1.5, pt: 1.5, pb: 1.5 }}>
-            {textHistoryQuery.isLoading ? (
-              <LoadingSkeleton variant="list" count={3} />
-            ) : (
-              <TicketTextHistoryPanel versions={textHistoryQuery.data ?? []} />
-            )}
-          </DialogContent>
-        </Dialog>
+            <DialogContent sx={{ px: 1.5, pt: 1.5, pb: 1.5 }}>
+              {textHistoryQuery.isLoading ? (
+                <LoadingSkeleton variant="list" count={3} />
+              ) : (
+                <TicketTextHistoryPanel versions={textHistoryQuery.data ?? []} />
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={primaryLinkOpen}
+            onClose={() => setPrimaryLinkOpen(false)}
+            maxWidth="sm"
+            fullWidth
+            scroll="paper"
+          >
+            <DialogTitle sx={{ pr: 6, position: "relative" }}>
+              Primary Ticket Link
+              <IconButton
+                aria-label="close"
+                onClick={() => setPrimaryLinkOpen(false)}
+                sx={{ position: "absolute", right: 10, top: 10, color: "inherit" }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+
+            <DialogContent sx={{ px: 1.5, pt: 1.5, pb: 1.5 }}>
+              {primaryLinkQuery.isLoading ? (
+                <LoadingSkeleton variant="list" count={1} />
+              ) : primaryLinkQuery.isError ? (
+                <Alert severity="error">Failed to load primary ticket link.</Alert>
+              ) : primaryLinkQuery.data ? (
+                <Stack spacing={0.7}>
+                  <Paper variant="outlined" sx={{ p: 1.15, borderRadius: 2 }}>
+                    <Stack spacing={0.6}>
+                      <CompactInfoRow
+                        label="Primary Ticket"
+                        value={`${primaryLinkQuery.data.primaryTicketTitle} (Ticket #${primaryLinkQuery.data.primaryTicketId})`}
+                      />
+                      <CompactInfoRow
+                        label="Internal Status"
+                        value={primaryLinkQuery.data.primaryInternalStatus}
+                      />
+                      <CompactInfoRow
+                        label="User Status"
+                        value={primaryLinkQuery.data.primaryUserTicketStatus}
+                      />
+                      <CompactInfoRow
+                        label="Assigned Agent"
+                        value={primaryLinkQuery.data.assignedAgentName ?? "Unassigned"}
+                      />
+                      <CompactInfoRow
+                        label="Link Status"
+                        value={primaryLinkQuery.data.linkStatus ?? "—"}
+                      />
+                      <CompactInfoRow
+                        label="Duplicate Type"
+                        value={primaryLinkQuery.data.duplicateType ?? "—"}
+                      />
+                    </Stack>
+                  </Paper>
+                </Stack>
+              ) : (
+                <Alert severity="info">No primary ticket link found.</Alert>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={confirmedDuplicatesOpen}
+            onClose={() => setConfirmedDuplicatesOpen(false)}
+            maxWidth="md"
+            fullWidth
+            scroll="paper"
+          >
+            <DialogTitle sx={{ pr: 6, position: "relative" }}>
+              Confirmed Duplicate Tickets
+              <IconButton
+                aria-label="close"
+                onClick={() => setConfirmedDuplicatesOpen(false)}
+                sx={{ position: "absolute", right: 10, top: 10, color: "inherit" }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+
+            <DialogContent sx={{ px: 1.5, pt: 1.5, pb: 1.5 }}>
+              {confirmedDuplicatesQuery.isLoading ? (
+                <LoadingSkeleton variant="list" count={2} />
+              ) : confirmedDuplicatesQuery.isError ? (
+                <Alert severity="error">Failed to load confirmed duplicates.</Alert>
+              ) : (confirmedDuplicatesQuery.data?.length ?? 0) === 0 ? (
+                <Alert severity="info">
+                  No confirmed duplicate tickets are currently linked to this ticket.
+                </Alert>
+              ) : (
+                <Stack spacing={0.75}>
+                  {confirmedDuplicatesQuery.data!.map((dup) => (
+                    <Paper key={dup.ticketId} variant="outlined" sx={{ p: 1, borderRadius: 1.5 }}>
+                      <Stack spacing={0.4}>
+                        <Typography sx={{ fontWeight: 800 }}>
+                          {dup.title} (Ticket #{dup.ticketId})
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Created by {dup.createdByName} • {formatDateTime(dup.createdAt)}
+                        </Typography>
+
+                        <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap>
+                          <Chip
+                            label={`Internal: ${dup.internalStatus}`}
+                            size="small"
+                            sx={{ ...statusChipSx(dup.internalStatus), fontWeight: 700 }}
+                          />
+                          <Chip
+                            label={`User: ${dup.userTicketStatus}`}
+                            size="small"
+                            sx={{ ...statusChipSx(dup.userTicketStatus), fontWeight: 700 }}
+                          />
+                        </Stack>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </DialogContent>
+          </Dialog>
+        </>
       )}
     </>
   );
