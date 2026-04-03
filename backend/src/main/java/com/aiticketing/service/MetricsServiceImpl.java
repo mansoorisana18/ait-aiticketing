@@ -144,6 +144,13 @@ public class MetricsServiceImpl implements MetricsService {
                 SELECT COUNT(*)
                 FROM admin_overrides
                 WHERE ao_override_type = 'ASSIGNMENT'
+                	AND EXISTS (
+                		SELECT 1
+                		FROM ai_decisions ad
+                		WHERE ad.ad_ticket_id = ao.ao_ticket_id
+                			AND ad.ad_decision_type = 'ROUTING'
+                			AND ad.ad_output_json ->> 'outcome' = 'ASSIGNED'
+                	)
                 """);
 
         //Using all override decisions per distinct ticket because one ticket can have multiple assignment override decisions but we are calculating the accuracy per last version routed ticket and not per ticket version
@@ -151,6 +158,13 @@ public class MetricsServiceImpl implements MetricsService {
                 SELECT COUNT(DISTINCT ao_ticket_id)
                 FROM admin_overrides
                 WHERE ao_override_type = 'ASSIGNMENT'
+                	AND EXISTS (
+                		SELECT 1
+                		FROM ai_decisions ad
+                		WHERE ad.ad_ticket_id = ao.ao_ticket_id
+                			AND ad.ad_decision_type = 'ROUTING'
+                			AND ad.ad_output_json ->> 'outcome' = 'ASSIGNED'
+                	)
                 """);
         
         routing.routingAttempts = routingAttempts;
