@@ -3,6 +3,7 @@ import {
   Box,
   Chip,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +16,8 @@ import { useNavigate } from "react-router-dom";
 import type { TicketResponseBean, UserRole, UserTicketResponseBean } from "../../../api/types";
 import { statusChipSx } from "./statusColors";
 import { priorityChipSx } from "./priorityColors";
-import { formatDateTime, formatRelative } from "../../../utils/dateTime";
+import { formatRelative } from "../../../utils/dateTime";
+import { duplicateStateChipSx } from "./duplicateColors";
 
 type AnyTicketRow = TicketResponseBean | UserTicketResponseBean;
 
@@ -50,14 +52,12 @@ export default function TicketTable({ tickets, role }: Props) {
             <TableCell>ID</TableCell>
             <TableCell>Title</TableCell>
             <TableCell>User Status</TableCell>
-
             {showInternalCols && <TableCell>Internal</TableCell>}
             {showInternalCols && <TableCell>Duplicate</TableCell>}
             {showInternalCols && <TableCell>Category</TableCell>}
             {showInternalCols && <TableCell>Priority</TableCell>}
             {showInternalCols && <TableCell sx={{ minWidth: 95 }}>AI Triaged</TableCell>}
             {showInternalCols && <TableCell>Assigned</TableCell>}
-
             <TableCell>Updated</TableCell>
             <TableCell>Created</TableCell>
           </TableRow>
@@ -165,21 +165,47 @@ export default function TicketTable({ tickets, role }: Props) {
                   </TableCell>
                 )}
 
-                {showInternalCols && <TableCell>{internal ? (t.duplicateState ?? "—") : "—"}</TableCell>}
-                {showInternalCols && <TableCell>{internal ? (t.aiCategory ?? "—") : "—"}</TableCell>}
-
                 {showInternalCols && (
                   <TableCell>
-                    {internal && t.aiPriority ? (
-                      <Chip label={t.aiPriority} size="small" sx={{...priorityChipSx(t.aiPriority)}} />
+                    {internal ? (
+                      <Stack spacing={0.4} alignItems="flex-start">
+                        <Chip
+                          label={(t.duplicateState ?? "NONE").toString()}
+                          size="small"
+                          sx={duplicateStateChipSx((t.duplicateState ?? "NONE").toString()) }
+                        />
+                        {t.primaryTicketId ? (
+                          <Typography variant="caption" color="text.secondary">
+                            Primary #{t.primaryTicketId}
+                          </Typography>
+                        ) : null}
+                      </Stack>
                     ) : (
                       "—"
                     )}
                   </TableCell>
                 )}
 
-                {showInternalCols && <TableCell>{internal ? (formatRelative(t.aiTriagedAt ?? null) ?? "—") : "—"}</TableCell>}
-                {showInternalCols && <TableCell>{internal ? (t.assignedToName ?? "Unassigned") : "—"}</TableCell>}
+                {showInternalCols && <TableCell>{internal ? (t.aiCategory ?? "—") : "—"}</TableCell>}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal && t.aiPriority ? (
+                      <Chip label={t.aiPriority} size="small" sx={{ ...priorityChipSx(t.aiPriority) }} />
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                )}
+
+                {showInternalCols && (
+                  <TableCell>
+                    {internal ? (formatRelative(t.aiTriagedAt ?? null) ?? "—") : "—"}
+                  </TableCell>
+                )}
+                {showInternalCols && (
+                  <TableCell>{internal ? (t.assignedToName ?? "Unassigned") : "—"}</TableCell>
+                )}
 
                 <TableCell>{formatRelative(t.updatedAt ?? null)}</TableCell>
                 <TableCell>{formatRelative(t.createdAt ?? null)}</TableCell>

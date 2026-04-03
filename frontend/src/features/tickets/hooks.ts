@@ -9,6 +9,8 @@ import type {
   UpdateTicketStatusRequestBean,
   UpdateVagueTicketRequestBean,
   TicketTextVersionResponseBean,
+  ConfirmedDuplicateTicketResponseBean,
+  PrimaryLinkedTicketResponseBean,
 } from "../../api/types";
 import {
   fetchTicketsForAgent,
@@ -23,6 +25,8 @@ import {
   updateTicketStatusByAgent,
   clarifyVagueTicket,
   fetchTicketTextVersionHistory,
+  fetchConfirmedDuplicates,
+  fetchPrimaryLink,
   type CreateTicketRequest,
 } from "./api";
 
@@ -136,6 +140,10 @@ export function useAdminOverride(ticketId: number) {
       await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
       await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
       await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
+      await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "primary-link"] });
+      await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "confirmed-duplicates"] });
+      await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ticket-summary"] });
+      await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ai-summary"] });
     },
   });
 }
@@ -150,5 +158,23 @@ export function useAgentUpdateStatus(ticketId: number) {
       await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
       await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
     },
+  });
+}
+
+export function useConfirmedDuplicates(ticketId: number | null, enabled = true) {
+  return useQuery<ConfirmedDuplicateTicketResponseBean[]>({
+    queryKey: ["ticket", ticketId, "confirmed-duplicates"],
+    queryFn: () => fetchConfirmedDuplicates(ticketId as number),
+    enabled: enabled && typeof ticketId === "number",
+    staleTime: 10_000,
+  });
+}
+
+export function usePrimaryLink(ticketId: number | null, enabled = true) {
+  return useQuery<PrimaryLinkedTicketResponseBean>({
+    queryKey: ["ticket", ticketId, "primary-link"],
+    queryFn: () => fetchPrimaryLink(ticketId as number),
+    enabled: enabled && typeof ticketId === "number",
+    staleTime: 10_000,
   });
 }

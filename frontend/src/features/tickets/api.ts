@@ -1,5 +1,5 @@
 import { axiosClient } from "../../api/axiosClient";
-import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean } from "../../api/types";
+import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean, ConfirmedDuplicateTicketResponseBean, PrimaryLinkedTicketResponseBean, } from "../../api/types";
 
 export type CreateTicketRequest = { title: string; description: string };
 
@@ -82,6 +82,26 @@ export async function fetchTicketTextVersionHistory(
 ): Promise<TicketTextVersionResponseBean[]> {
   const res = await axiosClient.get<TicketTextVersionResponseBean[]>(
     `/api/tickets/${ticketId}/text-version-history`
+  );
+  return res.data;
+}
+
+//DUPLICATE TICKET LINKS
+export async function fetchConfirmedDuplicates(
+  ticketId: number
+): Promise<ConfirmedDuplicateTicketResponseBean[]> {
+  const res = await axiosClient.get<ConfirmedDuplicateTicketResponseBean[]>(
+    `/api/tickets/${ticketId}/confirmed-duplicates`
+  );
+  return res.data;
+}
+
+//fetch primary linked ticket for a duplicate ticket
+export async function fetchPrimaryLink(
+  ticketId: number
+): Promise<PrimaryLinkedTicketResponseBean> {
+  const res = await axiosClient.get<PrimaryLinkedTicketResponseBean>(
+    `/api/tickets/${ticketId}/primary-link`
   );
   return res.data;
 }
