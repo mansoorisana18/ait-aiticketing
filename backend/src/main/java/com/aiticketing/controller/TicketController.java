@@ -23,6 +23,7 @@ import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
 import com.aiticketing.bean.response.ApiResponseBean;
 import com.aiticketing.bean.response.ConfirmedDuplicateTicketResponseBean;
+import com.aiticketing.bean.response.EligibleAgentResponseBean;
 import com.aiticketing.bean.response.PrimaryLinkedTicketResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
@@ -170,6 +171,36 @@ public class TicketController {
 		List<TicketResponseBean> list = ticketService.listAssignedTicketsForAgent(userId);
 		TICKET_CONTROLLER_LOG.info("TicketController :: exit listAssignedTicketsForAgent()");
 		return ResponseEntity.ok(ApiResponseBean.success(list));
+	}
+	
+	//ADMIN: Get agents list based on ticket category for ASSIGNMENT override
+	@Operation(
+	    summary = "Admin: get eligible agents for ticket assignment",
+	    description = "Returns agent users whose department matches the current ticket category. Used by admin assignment override dropdown."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(
+	        responseCode = "200",
+	        description = "Eligible agents fetched successfully",
+	        content = @Content(
+	            mediaType = "application/json",
+	            schema = @Schema(implementation = ApiResponseBean.class)
+	        )
+	    ),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "403", description = "Forbidden"),
+	    @ApiResponse(responseCode = "404", description = "Ticket not found")
+	})
+	@GetMapping("/{ticketId}/eligible-agents")
+	public ResponseEntity<ApiResponseBean<List<EligibleAgentResponseBean>>> getEligibleAgentsForTicket(
+	        @PathVariable Long ticketId) {
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: in getEligibleAgentsForTicket() :: ticketId={}", ticketId);
+
+	    List<EligibleAgentResponseBean> resp = ticketService.getEligibleAgentsForTicket(ticketId);
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit getEligibleAgentsForTicket()");
+	    return ResponseEntity.ok(ApiResponseBean.success(resp));
 	}
 	
 	@Operation(summary = "Create ticket comment")

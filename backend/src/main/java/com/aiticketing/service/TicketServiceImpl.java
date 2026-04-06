@@ -2,6 +2,7 @@ package com.aiticketing.service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,7 @@ import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
 import com.aiticketing.bean.response.AdminOverrideResponseBean;
 import com.aiticketing.bean.response.ConfirmedDuplicateTicketResponseBean;
+import com.aiticketing.bean.response.EligibleAgentResponseBean;
 import com.aiticketing.bean.response.PrimaryLinkedTicketResponseBean;
 import com.aiticketing.bean.response.TicketCommentResponseBean;
 import com.aiticketing.bean.response.TicketResponseBean;
@@ -218,6 +220,31 @@ public class TicketServiceImpl implements TicketService {
 		TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit listTicketsForUser() :: agentUserId={}, count={}",
 				agentUserId, list.size());
 		return list;
+	}
+	
+	@Transactional(readOnly = true)
+	public List<EligibleAgentResponseBean> getEligibleAgentsForTicket(Long ticketId) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in getEligibleAgentsForTicket() :: ticketId={}", ticketId);
+
+	    Ticket ticket = ticketRepo.findById(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    String category = ticket.getAiCategory();
+	    if (category == null || category.isBlank()) {
+	        throw new BadRequestException("Ticket category is not available for eligible-agent lookup");
+	    }
+
+	    //Only AGENT users from the same department/category are eligible
+	    List<User> agents = userRepo.findByRoleAndDepartment(UserRole.AGENT, category);
+
+	    List<EligibleAgentResponseBean> resp = agents.stream()
+	            .map(this::mapToEligibleAgentResp)
+	            .collect(Collectors.toList());
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit getEligibleAgentsForTicket() :: ticketId={}, count={}",
+	            ticketId, resp.size());
+
+	    return resp;
 	}
 	
 	//START - DUPLICATE CHECK
@@ -872,6 +899,15 @@ public class TicketServiceImpl implements TicketService {
 	    
 	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handleDuplicateOverride() :: ticketId={}, updatedDuplicateState={}, updatedStatus={}",
 	            ticket.getTicketId(), ticket.getDuplicateState(), ticket.getStatus());
+	}
+	
+	private EligibleAgentResponseBean mapToEligibleAgentResp(User user) {
+	    EligibleAgentResponseBean resp = new EligibleAgentResponseBean();
+	    resp.userId = user.getUserId();
+	    resp.username = user.getUsername();
+	    resp.email = user.getEmail();
+	    resp.department = user.getDepartment();
+	    return resp;
 	}
 	
 	private ConfirmedDuplicateTicketResponseBean mapToConfirmedDuplicateResp(Ticket duplicateTicket, TicketDuplicateLink link) {

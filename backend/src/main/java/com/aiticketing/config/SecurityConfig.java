@@ -82,7 +82,8 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/confirmed-duplicates").hasAnyRole("AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/primary-link").hasAnyRole("AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*").hasAnyRole("AGENT", "ADMIN")
-
+	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/eligible-agents").hasRole("ADMIN")
+	                
 	                //user scoped Tticket endpoints
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/user/**").hasRole("USER")
 	                .requestMatchers(HttpMethod.PATCH, "/api/tickets/user/*/clarify").hasRole("USER")
