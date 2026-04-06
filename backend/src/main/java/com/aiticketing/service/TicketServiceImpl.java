@@ -354,33 +354,16 @@ public class TicketServiceImpl implements TicketService {
 	    String newValueForAudit = null;
 	    
 	    switch(type) {
-			case "STATUS" -> {
-		        String newValue = (req.newValue == null) ? "" : req.newValue.trim().toUpperCase();
-		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for STATUS");
-		        ticket.setStatus(TicketStatus.valueOf(newValue));
-		        newValueForAudit = newValue;
+			case "STATUS" -> {		        
+		        newValueForAudit = handleStatusOverride(ticket, req);
 		    }
 		
-		    case "CATEGORY" -> {
-		        String newValue = (req.newValue == null) ? "" : req.newValue.trim();
-		        if (newValue.isBlank()) throw new BadRequestException("newValue is required for CATEGORY");
-		        ticket.setAiCategory(newValue);
-		        newValueForAudit = newValue;
+		    case "CATEGORY" -> {		        
+		        newValueForAudit = handleCategoryOverride(ticket, req);
 		    }
 		
-		    case "PRIORITY" -> {
-		        String newValue = Taxonomy.normalize(req.newValue);
-		        if (newValue == null || newValue.isBlank()) throw new BadRequestException("newValue is required for PRIORITY");
-		        
-		        TicketPriority p;
-		        try {
-		            p = TicketPriority.valueOf(newValue);
-		        } catch (IllegalArgumentException ex) {
-		            throw new BadRequestException("Invalid priority. Allowed: LOW, MEDIUM, HIGH, URGENT");
-		        }
-
-		        ticket.setAiPriority(p);
-		        newValueForAudit = p.name();		    
+		    case "PRIORITY" -> {		        
+		        newValueForAudit = handlePriorityOverride(ticket, req);		    
 		    }
 		
 		    //Allowed Overrides: POTENTIAL -> NONE, POTENTIAL -> CONFIRMED, CONFIRMED -> NONE
@@ -391,20 +374,8 @@ public class TicketServiceImpl implements TicketService {
 		        newValueForAudit = newValue;
 		    }
 		
-		    case "ASSIGNMENT" -> {
-		        // null => unassign
-		        Long assigneeId = req.newAssignedToUserId;
-		
-		        User assignee = null;
-		        if (assigneeId != null) {
-		            assignee = userRepo.findById(assigneeId)
-		                    .orElseThrow(() -> new NotFoundException("Assignee user not found"));
-		
-		            // if (assignee.getRole() != UserRole.AGENT) throw new BadRequestException("Assignee must be AGENT");
-		        }
-		
-		        ticket.setAssignedTo(assignee);
-		        newValueForAudit = (assignee == null) ? null : String.valueOf(assignee.getUserId());
+		    case "ASSIGNMENT" -> {		        
+		        newValueForAudit = handleAssignmentOverride(ticket, req);
 		    }
 		
 		    default -> throw new BadRequestException("Unsupported overrideType: " + type);
@@ -413,7 +384,7 @@ public class TicketServiceImpl implements TicketService {
 	    ticket.setUpdatedAt(OffsetDateTime.now());
 	    ticketRepo.save(ticket);
 
-	    // Audit trail row
+	    //Audit trail row
 	    AdminOverride ao = new AdminOverride();
 	    ao.setTicket(ticket);
 	    ao.setOverriddenBy(admin);
@@ -581,20 +552,203 @@ public class TicketServiceImpl implements TicketService {
 	    );
 	}
 	
+	private String handleStatusOverride(Ticket ticket, AdminOverrideRequestBean req) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleStatusOverride() :: ticketId={}, overrideType={}, newValue={}", ticket.getTicketId(), req.overrideType, req.newValue);
+		String newValue = (req.newValue == null) ? "" : req.newValue.trim().toUpperCase();
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    if (newValue.isBlank()) {
+	        throw new BadRequestException("newValue is required for STATUS");
+	    }
+
+	    TicketStatus newStatus;
+	    try {
+	        newStatus = TicketStatus.valueOf(newValue);
+	    } catch (IllegalArgumentException ex) {
+	        throw new BadRequestException("Invalid status value");
+	    }
+
+	    TicketStatus currentStatus = ticket.getStatus();
+
+	    //These are set by AI pipeline, so arent allowed as override by admin
+	    if (newStatus == TicketStatus.NEW
+	            || newStatus == TicketStatus.AI_PROCESSING
+	            || newStatus == TicketStatus.VAGUE
+	            || newStatus == TicketStatus.DUPLICATE_REVIEW
+	            || newStatus == TicketStatus.DUPLICATE) {
+	        throw new BadRequestException("STATUS override to " + newStatus.name() + " is not allowed");
+	    }
+
+	    //Allowing only forward moving states
+	    boolean allowed =
+	    		//Admin clearing VAGUE status and resuming the AI pipeline
+	            (currentStatus == TicketStatus.VAGUE && newStatus == TicketStatus.READY)
+	            //Normal status transitions
+	            || (currentStatus == TicketStatus.READY && newStatus == TicketStatus.IN_PROGRESS && ticket.getAssignedTo() != null)
+	            || (currentStatus == TicketStatus.READY && newStatus == TicketStatus.RESOLVED)
+	            || (currentStatus == TicketStatus.READY && newStatus == TicketStatus.CLOSED)
+	            || (currentStatus == TicketStatus.IN_PROGRESS && newStatus == TicketStatus.RESOLVED)
+	            || (currentStatus == TicketStatus.IN_PROGRESS && newStatus == TicketStatus.CLOSED)
+	            || (currentStatus == TicketStatus.RESOLVED && newStatus == TicketStatus.CLOSED);
+
+	    if (!allowed) {
+	        throw new BadRequestException("Invalid STATUS override transition from " + currentStatus + " to " + newStatus);
+	    }
+
+	    ticket.setStatus(newStatus);
+
+	    //Admin is overriding AI VAGUE decision, so we resume the next pipeline stage by adding DUPLICATE_CHECK_REQUESTED row in outbox table
+	    if (currentStatus == TicketStatus.VAGUE && newStatus == TicketStatus.READY) {
+	        OutboxEvent duplicateEvent = new OutboxEvent();
+	        duplicateEvent.setEventType(OutboxEventType.DUPLICATE_CHECK_REQUESTED.name());
+	        duplicateEvent.setAggregateType(AggregateType.TICKET.name());
+	        duplicateEvent.setAggregateId(ticket.getTicketId());
+	        try {
+	        	duplicateEvent.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", ticket.getCurrentTextVersion())));
+    	    } catch (Exception e) {
+    	    	duplicateEvent.setPayload("{}");
+    	    }
+	        duplicateEvent.setStatus("PENDING");
+	        duplicateEvent.setRetryCount(0);
+	        duplicateEvent.setCreatedAt(now);
+	        outboxEventRepo.save(duplicateEvent);
+	    }
+	    
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handleStatusOverride() :: ticketId={}", ticket.getTicketId());
+	    return newStatus.name();
+	}
+	
+	private String handleCategoryOverride(Ticket ticket, AdminOverrideRequestBean req) {
+		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleCategoryOverride() :: ticketId={}, overrideType={}, newValue={}", ticket.getTicketId(), req.overrideType, req.newValue);
+		String newCategory = req.newValue == null ? null : req.newValue.trim();
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    if (newCategory == null || newCategory.isBlank()) {
+	        throw new BadRequestException("newValue is required for CATEGORY");
+	    }
+
+	    //Don't allow category changes for terminal or duplicate-related states
+	    //Because these are when: workflow is completed, potential duplicate review is in progress or it is already consolidated duplicate 
+	    if (ticket.getStatus() == TicketStatus.CLOSED
+	            || ticket.getStatus() == TicketStatus.DUPLICATE_REVIEW
+	            || ticket.getStatus() == TicketStatus.DUPLICATE) {
+	        throw new BadRequestException("CATEGORY override is not allowed for current ticket status");
+	    }
+
+	    // Update category (this affects routing)
+	    ticket.setAiCategory(newCategory);
+
+	    //If ticket was already assigned, that assignment will now be invalid because department is derived from category
+	    //So 1. clearing assignment to avoid inconsistent state
+	    if (ticket.getAssignedTo() != null) {
+	        ticket.setAssignedTo(null);
+	    }
+
+	    //2. Trigger routing again based on new category, insert ROUTING_REQUESTED row in oe table
+	    OutboxEvent routingEvent = new OutboxEvent();
+	    routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
+	    routingEvent.setAggregateType(AggregateType.TICKET.name());
+	    routingEvent.setAggregateId(ticket.getTicketId());
+	    try {
+        	routingEvent.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", ticket.getCurrentTextVersion())));
+	    } catch (Exception e) {
+	    	routingEvent.setPayload("{}");
+	    }
+	    routingEvent.setStatus("PENDING");
+	    routingEvent.setRetryCount(0);
+	    routingEvent.setCreatedAt(now);
+
+	    outboxEventRepo.save(routingEvent);
+	    
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handleCategoryOverride() :: ticketId={}", ticket.getTicketId());
+	    return newCategory;
+	}
+	
+	private String handlePriorityOverride(Ticket ticket, AdminOverrideRequestBean req) {
+		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handlePriorityOverride() :: ticketId={}, overrideType={}, newValue={}", ticket.getTicketId(), req.overrideType, req.newValue);
+		String newValue = Taxonomy.normalize(req.newValue);
+
+	    if (newValue == null || newValue.isBlank()) {
+	        throw new BadRequestException("newValue is required for PRIORITY");
+	    }
+
+	    //No point in modifying closed tickets, so not allowed
+	    if (ticket.getStatus() == TicketStatus.CLOSED) {
+	        throw new BadRequestException("PRIORITY override is not allowed for CLOSED tickets");
+	    }
+
+	    TicketPriority priority;
+	    try {
+	        priority = TicketPriority.valueOf(newValue);
+	    } catch (IllegalArgumentException ex) {
+	        throw new BadRequestException("Invalid priority. Allowed: LOW, MEDIUM, HIGH, URGENT");
+	    }
+
+	    ticket.setAiPriority(priority);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handlePriorityOverride() :: ticketId={}", ticket.getTicketId());
+	    return priority.name();
+	}
+	
+	private String handleAssignmentOverride(Ticket ticket, AdminOverrideRequestBean req) {
+		TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleAssignmentOverride() :: ticketId={}, overrideType={}, newValue={}", ticket.getTicketId(), req.overrideType, req.newValue);
+		Long assigneeId = req.newAssignedToUserId;
+
+	    //Assignment is not allowed for below ticket statuses:
+	    //VAGUE → needs clarification first
+	    //DUPLICATE_REVIEW → under admin decision
+	    //DUPLICATE → not actionable as it is already linked to primary
+	    //CLOSED → terminal state
+	    if (ticket.getStatus() == TicketStatus.VAGUE
+	            || ticket.getStatus() == TicketStatus.DUPLICATE_REVIEW
+	            || ticket.getStatus() == TicketStatus.DUPLICATE
+	            || ticket.getStatus() == TicketStatus.CLOSED) {
+	        throw new BadRequestException("ASSIGNMENT override is not allowed for current ticket status");
+	    }
+
+	    //Allowing unassign
+	    if (assigneeId == null) {
+	        ticket.setAssignedTo(null);
+	        return null;
+	    }
+
+	    User assignee = userRepo.findById(assigneeId)
+	            .orElseThrow(() -> new NotFoundException("Assignee user not found"));
+
+	    //Ensuring only agents can be assigned
+	    if (assignee.getRole() != UserRole.AGENT) {
+	        throw new BadRequestException("Assigned user must have AGENT role");
+	    }
+
+	    //Preventing cross-department agent assignment errors
+	    String ticketCategory = ticket.getAiCategory();
+	    String agentDepartment = assignee.getDepartment();
+
+	    if (ticketCategory != null && agentDepartment != null
+	            && !ticketCategory.equalsIgnoreCase(agentDepartment)) {
+	        throw new BadRequestException("Agent department must match ticket category");
+	    }
+
+	    ticket.setAssignedTo(assignee);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit handleAssignmentOverride() :: ticketId={}", ticket.getTicketId());
+	    return String.valueOf(assignee.getUserId());
+	}
+	
 	private void handleDuplicateOverride(Ticket ticket, AdminOverrideRequestBean req) {
 	    String newDuplicateState = req.newValue == null ? null : req.newValue.trim().toUpperCase();
 	    String currentDuplicateState = ticket.getDuplicateState();
 	    TicketStatus currentStatus = ticket.getStatus();
 	    OffsetDateTime now = OffsetDateTime.now();
 
-	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleDuplicateOverride() :: ticketId={}, currentDuplicateState={}, currentStatus={}, requestedNewDuplicateState={}",
-	            ticket.getTicketId(), currentDuplicateState, currentStatus, newDuplicateState);
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in handleDuplicateOverride() :: ticketId={}, currentDuplicateState={}, currentStatus={}, requestedNewDuplicateState={}, primaryTicketId={}",
+	            ticket.getTicketId(), currentDuplicateState, currentStatus, newDuplicateState, req.referenceTicketId);
 	    
 	    if (newDuplicateState == null || newDuplicateState.isBlank()) {
 	        throw new BadRequestException("New duplicate state is required for DUPLICATE_LINK override");
 	    }
 
-	  //Allowed Overrides: POTENTIAL -> NONE, POTENTIAL -> CONFIRMED, CONFIRMED -> NONE
+	    //Allowed Overrides: POTENTIAL -> NONE, POTENTIAL -> CONFIRMED, CONFIRMED -> NONE
 	    if (!DuplicateState.NONE.name().equals(newDuplicateState)
 	            && !DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
 	        throw new BadRequestException("Duplicate override only supports NONE or CONFIRMED");
@@ -641,10 +795,9 @@ public class TicketServiceImpl implements TicketService {
 	        /*
 	         * If the ticket was previously waiting in DUPLICATE_REVIEW or had been
 	         * incorrectly marked DUPLICATE, it now becomes actionable again.
-	         * Route it only if it is still unassigned and not RESOLVED/CLOSED
+	         * Route it only if it is still unassigned
 	         */
-	        if (ticket.getAssignedTo() == null && ticket.getStatus() != TicketStatus.RESOLVED
-	                && ticket.getStatus() != TicketStatus.CLOSED) {
+	        if (ticket.getAssignedTo() == null) {
 	            OutboxEvent routingEvent = new OutboxEvent();
 	            routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
 	            routingEvent.setAggregateType(AggregateType.TICKET.name());
