@@ -52,37 +52,17 @@ import {
   useAgentUpdateStatus,
   useClarifyVagueTicket,
   useConfirmedDuplicates,
+  useEligibleAgents,
   usePrimaryLink,
   useTicketDetailsInternal,
   useTicketDetailsUser,
   useTicketTextVersionHistory,
 } from "../hooks";
 
-const INTERNAL_STATUS_OPTIONS: TicketStatus[] = [
-  "NEW",
-  "AI_PROCESSING",
-  "VAGUE",
-  "READY",
-  "DUPLICATE_REVIEW",
-  "IN_PROGRESS",
-  "DUPLICATE",
-  "RESOLVED",
-  "CLOSED",
-];
-
 const AGENT_STATUS_OPTIONS: UpdateTicketStatusRequestBean["status"][] = [
   "IN_PROGRESS",
   "RESOLVED",
   "CLOSED",
-];
-
-const OVERRIDE_TYPES: AdminOverrideType[] = [
-  "STATUS",
-  "CATEGORY",
-  "PRIORITY",
-  "DUPLICATE_LINK",
-  "KB_DRAFT",
-  "ASSIGNMENT",
 ];
 
 const CATEGORY_OPTIONS: Department[] = [
@@ -107,6 +87,48 @@ const CARD_SX = {
 
 /** App bar offset used when smooth-scrolling to Band 3 of AI Automation. */
 const APPBAR_SCROLL_OFFSET = 88;
+
+function getAllowedStatusOverrideOptions(ticket: TicketResponseBean): TicketStatus[] {
+  const currentStatus = ticket.status;
+  const isAssigned = ticket.assignedToUserId != null;
+
+  switch (currentStatus) {
+    case "VAGUE":
+      return ["READY"];
+
+    case "READY":
+      return isAssigned ? ["IN_PROGRESS", "RESOLVED", "CLOSED"] : ["RESOLVED", "CLOSED"];
+
+    case "IN_PROGRESS":
+      return ["RESOLVED", "CLOSED"];
+
+    case "RESOLVED":
+      return ["CLOSED"];
+
+    default:
+      return [];
+  }
+}
+
+function getAllowedOverrideTypes(ticket: TicketResponseBean): AdminOverrideType[] {
+  const allowed: AdminOverrideType[] = ["CATEGORY", "PRIORITY", "KB_DRAFT"];
+
+  const statusOptions = getAllowedStatusOverrideOptions(ticket);
+  if (statusOptions.length > 0) {
+    allowed.unshift("STATUS");
+  }
+
+  if (
+    (ticket.duplicateState ?? "").toString().toUpperCase() === "CONFIRMED" &&
+    ticket.status === "DUPLICATE"
+  ) {
+    allowed.push("DUPLICATE_LINK");
+  }
+
+  allowed.push("ASSIGNMENT");
+
+  return allowed;
+}
 
 /** Header common ticket metadata pills */
 function MetaPill({
@@ -283,6 +305,25 @@ export default function TicketDetailsPage() {
 
   const isLoading = isUser ? userQuery.isLoading : internalQuery.isLoading;
 
+  const internalTicketData = !isUser ? internalTicket : undefined;
+
+  const eligibleAgentsQuery = useEligibleAgents(
+    idNum,
+    Boolean(idNum && auth.token && isAdmin && overrideType === "ASSIGNMENT" && !isUser)
+  );
+
+  const allowedOverrideTypes = internalTicketData
+    ? getAllowedOverrideTypes(internalTicketData)
+    : [];
+
+  const allowedStatusOptions = internalTicketData
+    ? getAllowedStatusOverrideOptions(internalTicketData)
+    : [];
+
+  const canOverrideDuplicateLink =
+    (internalTicketData?.duplicateState ?? "").toString().toUpperCase() === "CONFIRMED" &&
+    internalTicketData?.status === "DUPLICATE";
+
   React.useEffect(() => {
     if (!internalTicket) return;
 
@@ -296,18 +337,36 @@ export default function TicketDetailsPage() {
     }
 
     if (isAdmin) {
-      if (overrideType === "STATUS") setNewValue(internalTicket.status);
+      if (overrideType === "STATUS") {
+        const nextOptions = getAllowedStatusOverrideOptions(internalTicket);
+        setNewValue(nextOptions[0] ?? "");
+      }
+
       if (overrideType === "CATEGORY") setNewValue(internalTicket.aiCategory ?? "");
       if (overrideType === "PRIORITY") setNewValue(internalTicket.aiPriority ?? "");
+
       if (overrideType === "DUPLICATE_LINK") {
-        setNewValue("");
+        setNewValue("NONE");
         setReferenceTicketId(null);
       }
+
       if (overrideType === "ASSIGNMENT") {
         setNewAssignedToUserId(internalTicket.assignedToUserId ?? null);
       }
     }
   }, [internalTicket, isAgent, isAdmin, overrideType]);
+
+  React.useEffect(() => {
+    if (!isAdmin || !internalTicketData) return;
+
+    if (!allowedOverrideTypes.includes(overrideType)) {
+      setOverrideType(allowedOverrideTypes[0] ?? "CATEGORY");
+      setNewValue("");
+      setNewAssignedToUserId(null);
+      setReason("");
+      setLastAdminAction(null);
+    }
+  }, [isAdmin, internalTicketData, overrideType, allowedOverrideTypes]);
 
   React.useEffect(() => {
     if (
@@ -331,7 +390,6 @@ export default function TicketDetailsPage() {
   if (isUser && !userTicket) return <Typography>Ticket not found.</Typography>;
   if (!isUser && !internalTicket) return <Typography>Ticket not found.</Typography>;
 
-  const internalTicketData = !isUser ? internalTicket! : undefined;
   const currentTicket = isUser ? userTicket! : internalTicketData!;
 
   const headerTitle = currentTicket.title;
@@ -365,12 +423,10 @@ export default function TicketDetailsPage() {
     if (!isAdmin || !idNum) return;
 
     if (overrideType === "DUPLICATE_LINK") {
-      const currentDuplicateState = (internalTicketData?.duplicateState ?? "")
-        .toString()
-        .toUpperCase();
-
       const isAllowedDuplicateOverride =
-        currentDuplicateState === "CONFIRMED" && newValue === "NONE";
+        (internalTicketData?.duplicateState ?? "").toString().toUpperCase() === "CONFIRMED" &&
+        internalTicketData?.status === "DUPLICATE" &&
+        newValue === "NONE";
 
       if (!isAllowedDuplicateOverride) {
         return;
@@ -431,19 +487,35 @@ export default function TicketDetailsPage() {
     if (overrideType === "ASSIGNMENT") {
       return (
         <TextField
-          label="Assign to Agent User ID (blank = unassign)"
-          type="number"
+          select
+          label="Assign to Eligible Agent"
           value={newAssignedToUserId ?? ""}
           onChange={(e) =>
             setNewAssignedToUserId(e.target.value === "" ? null : Number(e.target.value))
           }
-          helperText="agents dropdown filtered by department."
           size="small"
-        />
+          helperText="Only eligible agents for this ticket are shown."
+          disabled={eligibleAgentsQuery.isLoading}
+        >
+          <MenuItem value="">—</MenuItem>
+          {(eligibleAgentsQuery.data ?? []).map((agent) => (
+            <MenuItem key={agent.userId} value={agent.userId}>
+              {agent.username} ({agent.email})
+            </MenuItem>
+          ))}
+        </TextField>
       );
     }
 
     if (overrideType === "STATUS") {
+      if (allowedStatusOptions.length === 0) {
+        return (
+          <Alert severity="info">
+            No valid status override transitions are available for this ticket.
+          </Alert>
+        );
+      }
+
       return (
         <TextField
           select
@@ -452,7 +524,7 @@ export default function TicketDetailsPage() {
           onChange={(e) => setNewValue(e.target.value)}
           size="small"
         >
-          {INTERNAL_STATUS_OPTIONS.map((s) => (
+          {allowedStatusOptions.map((s) => (
             <MenuItem key={s} value={s}>
               {s}
             </MenuItem>
@@ -500,15 +572,11 @@ export default function TicketDetailsPage() {
     }
 
     if (overrideType === "DUPLICATE_LINK") {
-      const canOverrideConfirmedDuplicate =
-        (internalTicketData?.duplicateState ?? "").toString().toUpperCase() === "CONFIRMED";
-
-      if (!canOverrideConfirmedDuplicate) {
+      if (!canOverrideDuplicateLink) {
         return (
           <Alert severity="info">
             Duplicate override is available here only for reverting a confirmed duplicate back to
-            NONE. Potential duplicate review should be handled using the Duplicate Review Action
-            panel.
+            NONE when the ticket is currently in DUPLICATE status.
           </Alert>
         );
       }
@@ -520,9 +588,8 @@ export default function TicketDetailsPage() {
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
           size="small"
-          helperText="Only CONFIRMED → NONE is supported through the generic override panel."
+          helperText="Only CONFIRMED → NONE override is supported through this panel."
         >
-          <MenuItem value="">—</MenuItem>
           {DUPLICATE_OVERRIDE_OPTIONS.map((d) => (
             <MenuItem key={d} value={d}>
               {d}
@@ -832,7 +899,7 @@ export default function TicketDetailsPage() {
                         }}
                         size="small"
                       >
-                        {OVERRIDE_TYPES.map((t) => (
+                        {allowedOverrideTypes.map((t) => (
                           <MenuItem key={t} value={t}>
                             {t}
                           </MenuItem>
@@ -855,12 +922,16 @@ export default function TicketDetailsPage() {
                         onClick={submitAdminOverride}
                         disabled={
                           adminOverride.isPending ||
+                          (overrideType === "STATUS" && allowedStatusOptions.length === 0) ||
                           (overrideType === "DUPLICATE_LINK" &&
                             !(
-                              (internalTicketData?.duplicateState ?? "")
-                                .toString()
-                                .toUpperCase() === "CONFIRMED" && newValue === "NONE"
-                            ))
+                              (internalTicketData?.duplicateState ?? "").toString().toUpperCase() ===
+                                "CONFIRMED" &&
+                              internalTicketData?.status === "DUPLICATE" &&
+                              newValue === "NONE"
+                            )) ||
+                          (overrideType === "ASSIGNMENT" &&
+                            (eligibleAgentsQuery.isLoading || newAssignedToUserId == null))
                         }
                       >
                         {adminOverride.isPending ? "Applying..." : "Apply Override"}

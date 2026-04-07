@@ -11,6 +11,7 @@ import type {
   TicketTextVersionResponseBean,
   ConfirmedDuplicateTicketResponseBean,
   PrimaryLinkedTicketResponseBean,
+  EligibleAgentResponseBean,
 } from "../../api/types";
 import {
   fetchTicketsForAgent,
@@ -27,6 +28,7 @@ import {
   fetchTicketTextVersionHistory,
   fetchConfirmedDuplicates,
   fetchPrimaryLink,
+  fetchEligibleAgents,
   type CreateTicketRequest,
 } from "./api";
 
@@ -140,6 +142,7 @@ export function useAdminOverride(ticketId: number) {
       await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
       await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
       await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
+      await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "eligible-agents"] });
       await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "primary-link"] });
       await qc.invalidateQueries({ queryKey: ["ticket", ticketId, "confirmed-duplicates"] });
       await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ticket-summary"] });
@@ -174,6 +177,15 @@ export function usePrimaryLink(ticketId: number | null, enabled = true) {
   return useQuery<PrimaryLinkedTicketResponseBean>({
     queryKey: ["ticket", ticketId, "primary-link"],
     queryFn: () => fetchPrimaryLink(ticketId as number),
+    enabled: enabled && typeof ticketId === "number",
+    staleTime: 10_000,
+  });
+}
+
+export function useEligibleAgents(ticketId: number | null, enabled = true) {
+  return useQuery<EligibleAgentResponseBean[]>({
+    queryKey: ["ticket", ticketId, "eligible-agents"],
+    queryFn: () => fetchEligibleAgents(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
     staleTime: 10_000,
   });

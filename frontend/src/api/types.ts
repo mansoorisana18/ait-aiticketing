@@ -199,6 +199,14 @@ export type TicketTextVersionResponseBean = {
   createdAt?: string | null;
 }
 
+//for eligible agents in routing
+export type EligibleAgentResponseBean = {
+  userId: number;
+  username: string;
+  email: string;
+  department: string;
+};
+
 //GetConfirmedDuplicates of a primary ticket visible to Admin/Agent
 export type ConfirmedDuplicateTicketResponseBean = {
   ticketId: number;

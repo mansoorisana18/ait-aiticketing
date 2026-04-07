@@ -1,5 +1,5 @@
 import { axiosClient } from "../../api/axiosClient";
-import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean, ConfirmedDuplicateTicketResponseBean, PrimaryLinkedTicketResponseBean, } from "../../api/types";
+import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean, ConfirmedDuplicateTicketResponseBean, PrimaryLinkedTicketResponseBean, EligibleAgentResponseBean, } from "../../api/types";
 
 export type CreateTicketRequest = { title: string; description: string };
 
@@ -102,6 +102,16 @@ export async function fetchPrimaryLink(
 ): Promise<PrimaryLinkedTicketResponseBean> {
   const res = await axiosClient.get<PrimaryLinkedTicketResponseBean>(
     `/api/tickets/${ticketId}/primary-link`
+  );
+  return res.data;
+}
+
+//fetch eligible agents for routing a ticket
+export async function fetchEligibleAgents(
+  ticketId: number
+): Promise<EligibleAgentResponseBean[]> {
+  const res = await axiosClient.get<EligibleAgentResponseBean[]>(
+    `/api/tickets/${ticketId}/eligible-agents`
   );
   return res.data;
 }
