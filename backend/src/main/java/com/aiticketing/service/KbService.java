@@ -12,7 +12,7 @@ public interface KbService {
 
     KbArticleResponseBean updateKbArticle(Long adminUserId, Long kbId, UpdateKbArticleRequestBean req);
 
-    KbArticleResponseBean getKbArticleById(Long kbId);
+    KbArticleResponseBean getKbArticleById(Long requestedUserId, Long kbId);
 
     List<KbArticleResponseBean> listAllKbArticles();
 }

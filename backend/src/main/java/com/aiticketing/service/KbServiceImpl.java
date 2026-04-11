@@ -19,7 +19,9 @@ import com.aiticketing.entity.enums.KbArticleStatus;
 import com.aiticketing.entity.enums.UserRole;
 import com.aiticketing.exception.BadRequestException;
 import com.aiticketing.exception.NotFoundException;
+import com.aiticketing.exception.UnauthorizedException;
 import com.aiticketing.repository.KbArticleRepository;
+import com.aiticketing.repository.KbSuggestionRepository;
 import com.aiticketing.repository.UserRepository;
 
 @Service("KbServiceImpl")
@@ -28,17 +30,20 @@ public class KbServiceImpl implements KbService {
     private static final Logger KB_SERVICE_LOG = LoggerFactory.getLogger(KbServiceImpl.class);
 
     private final KbArticleRepository kbArticleRepo;
+    private final KbSuggestionRepository kbSuggestionRepo;
     private final UserRepository userRepo;
     private final KbEmbeddingGenerationService kbEmbeddingGenerationService;
     private final KbEmbeddingJdbcRepository kbEmbeddingJdbcRepository;
 
     public KbServiceImpl(
             KbArticleRepository kbArticleRepo,
+            KbSuggestionRepository kbSuggestionRepo,
             UserRepository userRepo,
             KbEmbeddingGenerationService kbEmbeddingGenerationService,
             KbEmbeddingJdbcRepository kbEmbeddingJdbcRepository
     ) {
         this.kbArticleRepo = kbArticleRepo;
+        this.kbSuggestionRepo = kbSuggestionRepo;
         this.userRepo = userRepo;
         this.kbEmbeddingGenerationService = kbEmbeddingGenerationService;
         this.kbEmbeddingJdbcRepository = kbEmbeddingJdbcRepository;
@@ -144,15 +149,33 @@ public class KbServiceImpl implements KbService {
 
     @Override
     @Transactional(readOnly = true)
-    public KbArticleResponseBean getKbArticleById(Long kbId) {
-        KB_SERVICE_LOG.info("KbServiceImpl :: in getKbArticleById() :: kbId={}", kbId);
+    public KbArticleResponseBean getKbArticleById(Long requesterUserId, Long kbId) {
+        KB_SERVICE_LOG.info("KbServiceImpl :: in getKbArticleById() :: requesterUserId={} kbId={}",
+                requesterUserId, kbId);
+
+        User requester = userRepo.findById(requesterUserId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         KbArticle kb = kbArticleRepo.findById(kbId)
                 .orElseThrow(() -> new NotFoundException("KB article not found"));
 
+        // ADMIN and AGENT can view KB directly
+        if (requester.getRole() == UserRole.ADMIN || requester.getRole() == UserRole.AGENT) {
+            KbArticleResponseBean resp = mapToKbArticleResponse(kb);
+            KB_SERVICE_LOG.info("KbServiceImpl :: exit getKbArticleById() :: role={} kbId={}",
+                    requester.getRole(), kbId);
+            return resp;
+        }
+
+        // USER can only view a KB if it is linked to one of their own tickets
+        boolean allowed = kbSuggestionRepo.existsByKbArticle_KbIdAndTicket_CreatedBy_UserId(kbId, requesterUserId);
+        if (!allowed) {
+            throw new UnauthorizedException("You are not allowed to view this KB article");
+        }
+
         KbArticleResponseBean resp = mapToKbArticleResponse(kb);
 
-        KB_SERVICE_LOG.info("KbServiceImpl :: exit getKbArticleById() :: kbId={}", kbId);
+        KB_SERVICE_LOG.info("KbServiceImpl :: exit getKbArticleById() :: USER access granted :: kbId={}", kbId);
         return resp;
     }
 

@@ -97,7 +97,7 @@ public class KbController {
 
     @Operation(
         summary = "Get KB article by id",
-        description = "Returns a KB article by id."
+        description = "Returns a KB article by id. ADMIN and AGENT can view KBs directly. USER can only view KB articles suggested on their own tickets."
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -108,12 +108,17 @@ public class KbController {
                 schema = @Schema(implementation = ApiResponseBean.class)
             )
         ),
+        @ApiResponse(responseCode = "401", description = "Unauthorized"),
         @ApiResponse(responseCode = "404", description = "KB article not found")
     })
     @GetMapping("/{kbId}")
-    public ResponseEntity<ApiResponseBean<KbArticleResponseBean>> getKbArticleById(@PathVariable Long kbId) {
+    public ResponseEntity<ApiResponseBean<KbArticleResponseBean>> getKbArticleById(
+            @PathVariable Long kbId,
+            @AuthenticationPrincipal AuthUserPrincipal principal) {
+
         KB_CONTROLLER_LOG.info("KbController :: in getKbArticleById() :: kbId={}", kbId);
-        KbArticleResponseBean resp = kbService.getKbArticleById(kbId);
+        Long requesterUserId = principal.getUserId();
+        KbArticleResponseBean resp = kbService.getKbArticleById(requesterUserId, kbId);
         KB_CONTROLLER_LOG.info("KbController :: exit getKbArticleById() :: kbId={}", kbId);
 
         return ResponseEntity.ok(ApiResponseBean.success(resp));
@@ -121,7 +126,7 @@ public class KbController {
 
     @Operation(
         summary = "List KB articles",
-        description = "Returns all KB articles."
+        description = "Returns all KB articles for admin management."
     )
     @ApiResponses(value = {
         @ApiResponse(
