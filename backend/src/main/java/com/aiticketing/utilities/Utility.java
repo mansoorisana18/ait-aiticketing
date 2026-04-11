@@ -16,6 +16,7 @@ public class Utility {
 	            return "OPEN";
 	
 	        case VAGUE:
+	        case KB_SUGGESTED:
 	            return "WAITING FOR YOUR INPUT";
 	
 	        case IN_PROGRESS:

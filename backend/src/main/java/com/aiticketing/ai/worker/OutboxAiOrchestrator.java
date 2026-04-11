@@ -6,11 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.aiticketing.ai.dto.ClaimedOutboxWork;
+import com.aiticketing.ai.dto.KbSuggestionOutcome;
 import com.aiticketing.ai.dto.RoutingResult;
 import com.aiticketing.ai.dto.TriageOutcome;
 import com.aiticketing.ai.dto.TriageResult;
 import com.aiticketing.ai.service.AiTriageService;
 import com.aiticketing.ai.service.DuplicateDetectionService;
+import com.aiticketing.ai.service.KbSuggestionService;
 import com.aiticketing.ai.service.RoutingService;
 import com.aiticketing.entity.Ticket;
 import com.aiticketing.entity.enums.OutboxEventType;
@@ -25,6 +27,7 @@ public class OutboxAiOrchestrator {
 
     private final OutboxAiPersistenceService persistenceService;
     private final DuplicateDetectionService duplicateDetectionService;
+    private final KbSuggestionService kbSuggestionService;
     private final AiTriageService triageService;
     private final RoutingService routingService;
     private final TicketRepository ticketRepo;
@@ -32,6 +35,7 @@ public class OutboxAiOrchestrator {
     public OutboxAiOrchestrator(
             @Value("${aiticketing.ai.worker.max-retries}") int maxRetries,
             DuplicateDetectionService duplicateDetectionService,
+            KbSuggestionService kbSuggestionService,
             OutboxAiPersistenceService persistenceService,
             AiTriageService triageService,
             RoutingService routingService,
@@ -39,6 +43,7 @@ public class OutboxAiOrchestrator {
     ) {
         this.maxRetries = maxRetries;
         this.duplicateDetectionService = duplicateDetectionService;
+        this.kbSuggestionService = kbSuggestionService;
         this.persistenceService = persistenceService;
         this.triageService = triageService;
         this.routingService = routingService;
@@ -59,7 +64,9 @@ public class OutboxAiOrchestrator {
             if (OutboxEventType.TRIAGE_REQUESTED.name().equals(work.eventType)) {            	
                 handleTriage(work);
             } else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType)) {
-            	handleDuplicateCheck(work);
+                handleDuplicateCheck(work);
+            } else if (OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)) {
+                handleKbSuggestion(work);
             } else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
                 handleRouting(work);
             } else {
@@ -123,6 +130,27 @@ public class OutboxAiOrchestrator {
 
         ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: handleDuplicateCheck() success :: oeId={} ticketId={} duplicateState={} primaryTicketId={}",
                 work.outboxId, work.aggregateId, outcome.result.duplicateState, outcome.result.primaryTicketId);
+    }
+
+    private void handleKbSuggestion(ClaimedOutboxWork work) {
+        ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: in handleKbSuggestion() start :: oeId={} ticketId={} textVersion={}",
+                work.outboxId, work.aggregateId, work.textVersion);
+
+        KbSuggestionOutcome outcome = kbSuggestionService.suggestKb(
+                work.aggregateId,
+                work.textVersion,
+                work.ticketTitle,
+                work.ticketDescription
+        );
+
+        if (!outcome.success) {
+            throw new RuntimeException(outcome.error);
+        }
+
+        persistenceService.persistKbSuggestionSuccess(work, outcome.result);
+
+        ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: handleKbSuggestion() success :: oeId={} ticketId={} suggestionFound={} kbId={}",
+                work.outboxId, work.aggregateId, outcome.result.suggestionFound, outcome.result.kbId);
     }
 
     private void handleRouting(ClaimedOutboxWork work) {
