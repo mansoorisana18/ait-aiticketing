@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.aiticketing.ai.Taxonomy;
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
+import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
@@ -25,6 +27,8 @@ import com.aiticketing.bean.response.TicketResponseBean;
 import com.aiticketing.bean.response.TicketTextVersionResponseBean;
 import com.aiticketing.bean.response.UserTicketResponseBean;
 import com.aiticketing.entity.AdminOverride;
+import com.aiticketing.entity.KbArticle;
+import com.aiticketing.entity.KbSuggestion;
 import com.aiticketing.entity.OutboxEvent;
 import com.aiticketing.entity.Ticket;
 import com.aiticketing.entity.TicketComment;
@@ -37,6 +41,10 @@ import com.aiticketing.entity.enums.CommentVisibility;
 import com.aiticketing.entity.enums.DuplicateLinkStatus;
 import com.aiticketing.entity.enums.DuplicateLinkType;
 import com.aiticketing.entity.enums.DuplicateState;
+import com.aiticketing.entity.enums.KbArticleStatus;
+import com.aiticketing.entity.enums.KbSuggestionAction;
+import com.aiticketing.entity.enums.KbSuggestionSource;
+import com.aiticketing.entity.enums.KbSuggestionStatus;
 import com.aiticketing.entity.enums.OutboxEventType;
 import com.aiticketing.entity.enums.TicketPriority;
 import com.aiticketing.entity.enums.TicketStatus;
@@ -46,6 +54,8 @@ import com.aiticketing.exception.NotFoundException;
 import com.aiticketing.exception.UnauthorizedException;
 import com.aiticketing.repository.AdminOverrideRepository;
 import com.aiticketing.repository.AiDecisionRepository;
+import com.aiticketing.repository.KbArticleRepository;
+import com.aiticketing.repository.KbSuggestionRepository;
 import com.aiticketing.repository.OutboxEventRepository;
 import com.aiticketing.repository.TicketCommentRepository;
 import com.aiticketing.repository.TicketDuplicateLinkRepository;
@@ -58,6 +68,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service("TicketServiceImpl")
 public class TicketServiceImpl implements TicketService {
+	
+	@Autowired
+	private KbSuggestionRepository kbSuggestionRepo;
+	
+	@Autowired
+	private KbArticleRepository kbArticleRepo;
 	
 	@Autowired
 	AiDecisionRepository aiDecisionRepo;
@@ -1066,6 +1082,8 @@ public class TicketServiceImpl implements TicketService {
 		
 		r.vagueReason = t.getVagueReason();
 		r.clarificationPrompt =t.getClarificationPrompt();
+		
+		populateKbSuggestionDetails(t, r);
 
 		TICKET_SERVICE_LOG.info(
 				"TicketServiceImpl :: exit setUserTicketResponseBean() :: ticketId={}, userTicketStatus={}, assignedToName={}, vagueReason={}",
@@ -1119,6 +1137,8 @@ public class TicketServiceImpl implements TicketService {
 		}
 
 		populateDuplicateDetails(t, r);
+		
+		populateKbSuggestionDetails(t, r);
 		
 		TICKET_SERVICE_LOG.info(
 				"TicketServiceImpl :: exit setTicketResponseBean() :: ticketId={}, status={}, assignedToUserId={}",
@@ -1240,4 +1260,183 @@ public class TicketServiceImpl implements TicketService {
 	    r.createdAt = ttv.getCreatedAt();
 	    return r;
 	}
+	
+	@Override
+	@Transactional
+	public UserTicketResponseBean respondToKbSuggestion(Long userId, Long ticketId,
+	                                                    KbSuggestionResponseRequestBean req) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in respondToKbSuggestion() :: userId={} ticketId={} req={}",
+	            userId, ticketId, req);
+
+	    Ticket ticket = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    if (ticket.getCreatedBy() == null || !ticket.getCreatedBy().getUserId().equals(userId)) {
+	        throw new UnauthorizedException("You are not allowed to respond to KB suggestion for this ticket");
+	    }
+
+	    if (ticket.getStatus() != TicketStatus.KB_SUGGESTED) {
+	        throw new BadRequestException("Ticket is not in KB_SUGGESTED state");
+	    }
+
+	    String actionRaw = req.action == null ? "" : req.action.trim().toUpperCase();
+	    KbSuggestionAction action;
+	    try {
+	        action = KbSuggestionAction.valueOf(actionRaw);
+	    } catch (IllegalArgumentException ex) {
+	        throw new BadRequestException("Invalid action. Allowed: ACCEPTED, REJECTED");
+	    }
+
+	    KbSuggestion suggestion = kbSuggestionRepo
+	            .findFirstByTicket_TicketIdAndStatusOrderByCreatedAtDesc(
+	                    ticketId,
+	                    KbSuggestionStatus.SUGGESTED.name()
+	            )
+	            .orElseThrow(() -> new NotFoundException("No active KB suggestion found"));
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    if (action == KbSuggestionAction.ACCEPTED) {
+	        suggestion.setStatus(KbSuggestionStatus.ACCEPTED.name());
+	        suggestion.setRespondedAt(now);
+	        kbSuggestionRepo.save(suggestion);
+
+	        ticket.setStatus(TicketStatus.RESOLVED);
+	        ticket.setUpdatedAt(now);
+	        ticketRepo.save(ticket);
+
+	        TICKET_SERVICE_LOG.info("TicketServiceImpl :: respondToKbSuggestion() ACCEPTED :: ticketId={} suggestionId={} kbId={}",
+	                ticketId, suggestion.getSuggestionId(), suggestion.getKbArticle().getKbId());
+
+	    } else if (action == KbSuggestionAction.REJECTED) {
+	        suggestion.setStatus(KbSuggestionStatus.REJECTED.name());
+	        suggestion.setRespondedAt(now);
+	        kbSuggestionRepo.save(suggestion);
+
+	        ticket.setStatus(TicketStatus.READY);
+	        ticket.setUpdatedAt(now);
+	        ticketRepo.save(ticket);
+
+	        //KB SUGGESTION is REJECTED by the user, so do ROUTING
+	        OutboxEvent routingEvent = new OutboxEvent();
+	        routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
+	        routingEvent.setAggregateType(AggregateType.TICKET.name());
+	        routingEvent.setAggregateId(ticketId);
+	        try {
+	            routingEvent.setPayload(objectMapper.writeValueAsString(
+	                    java.util.Map.of("textVersion", ticket.getCurrentTextVersion())
+	            ));
+	        } catch (Exception e) {
+	            routingEvent.setPayload("{}");
+	        }
+	        routingEvent.setStatus("PENDING");
+	        routingEvent.setRetryCount(0);
+	        routingEvent.setCreatedAt(now);
+	        outboxEventRepo.save(routingEvent);
+
+	        TICKET_SERVICE_LOG.info("TicketServiceImpl :: respondToKbSuggestion() REJECTED :: ticketId={} suggestionId={} routingRequested=true",
+	                ticketId, suggestion.getSuggestionId());
+	    }
+
+	    Ticket refreshed = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found after KB response"));
+
+	    UserTicketResponseBean resp = setUserTicketResponseBean(refreshed);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit respondToKbSuggestion() :: ticketId={} userTicketStatus={}",
+	            resp.ticketId, resp.userTicketStatus);
+
+	    return resp;
+	}
+	
+	@Override
+	@Transactional
+	public TicketResponseBean suggestKbManuallyByAgent(Long agentUserId, Long ticketId,
+	                                                   ManualKbSuggestionRequestBean req) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in suggestKbManuallyByAgent() :: agentUserId={} ticketId={} req={}",
+	            agentUserId, ticketId, req);
+
+	    userRepo.findById(agentUserId)
+	            .orElseThrow(() -> new NotFoundException("User not found"));
+
+	    Ticket ticket = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    if (ticket.getAssignedTo() == null || !ticket.getAssignedTo().getUserId().equals(agentUserId)) {
+	        throw new UnauthorizedException("Only the assigned agent can manually suggest a KB article");
+	    }
+
+	    KbArticle kbArticle = kbArticleRepo.findByKbIdAndStatus(req.kbId, KbArticleStatus.PUBLISHED.name())
+	            .orElseThrow(() -> new NotFoundException("KB article not found or not published"));
+
+	    if (kbSuggestionRepo.existsByTicket_TicketIdAndKbArticle_KbId(ticketId, req.kbId)) {
+	        throw new BadRequestException("This KB article has already been suggested for the ticket");
+	    }
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    KbSuggestion suggestion = new KbSuggestion();
+	    suggestion.setTicket(ticket);
+	    suggestion.setKbArticle(kbArticle);
+	    suggestion.setSimilarity(null);
+	    suggestion.setSource(KbSuggestionSource.MANUAL_AGENT.name());
+	    suggestion.setStatus(KbSuggestionStatus.SUGGESTED.name());
+	    suggestion.setCreatedAt(now);
+	    suggestion.setRespondedAt(null);
+	    kbSuggestionRepo.save(suggestion);
+
+	    ticket.setStatus(TicketStatus.KB_SUGGESTED);
+	    ticket.setUpdatedAt(now);
+	    ticketRepo.save(ticket);
+
+	    Ticket refreshed = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found after manual KB suggestion"));
+
+	    TicketResponseBean resp = setTicketResponseBean(refreshed);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit suggestKbManuallyByAgent() :: ticketId={} kbId={} status={}",
+	            ticketId, req.kbId, resp.status);
+
+	    return resp;
+	}
+	
+	private void populateKbSuggestionDetails(Ticket ticket, UserTicketResponseBean resp) {
+
+	    KbSuggestion suggestion = kbSuggestionRepo
+	            .findFirstByTicket_TicketIdOrderByCreatedAtDesc(ticket.getTicketId())
+	            .orElse(null);
+
+	    if (suggestion == null) return;
+
+	    resp.suggestedKbId = suggestion.getKbArticle().getKbId();
+	    resp.suggestedKbTitle = suggestion.getKbArticle().getTitle();
+	    resp.suggestedKbPreview = buildPreview(suggestion.getKbArticle().getBody());
+	    resp.kbSuggestionStatus = suggestion.getStatus();
+	}
+	
+	private void populateKbSuggestionDetails(Ticket ticket, TicketResponseBean resp) {
+
+	    KbSuggestion suggestion = kbSuggestionRepo
+	            .findFirstByTicket_TicketIdOrderByCreatedAtDesc(ticket.getTicketId())
+	            .orElse(null);
+
+	    if (suggestion == null) return;
+
+	    resp.suggestedKbId = suggestion.getKbArticle().getKbId();
+	    resp.suggestedKbTitle = suggestion.getKbArticle().getTitle();
+	    resp.suggestedKbPreview = buildPreview(suggestion.getKbArticle().getBody());
+	    resp.kbSuggestionStatus = suggestion.getStatus();
+	    resp.kbSuggestionSource = suggestion.getSource();
+
+	    if (suggestion.getSimilarity() != null) {
+	        resp.suggestedKbSimilarity = suggestion.getSimilarity().doubleValue();
+	    }
+	}
+	
+	private String buildPreview(String body) {
+	    if (body == null) return "";
+	    int limit = 200;
+	    return body.length() <= limit ? body : body.substring(0, limit) + "...";
+	}
+
 }

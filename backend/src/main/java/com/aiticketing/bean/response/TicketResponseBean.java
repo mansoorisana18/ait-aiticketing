@@ -58,6 +58,13 @@ public class TicketResponseBean {
     public String duplicateLinkStatus;
     public Boolean propagateResolution;
     
+    //KB suggestion preview/internal details
+    public Long suggestedKbId;
+    public String suggestedKbTitle;
+    public String suggestedKbPreview;
+    public String kbSuggestionStatus;
+    public String kbSuggestionSource;
+    public Double suggestedKbSimilarity;
 
     public OffsetDateTime createdAt;
     public OffsetDateTime updatedAt;
@@ -78,7 +85,9 @@ public class TicketResponseBean {
 				+ ", aiLastError=" + aiLastError + ", aiTriagedAt=" + aiTriagedAt + ", vagueCount=" + vagueCount
 				+ ", lastVagueAt=" + lastVagueAt + ", firstAssignedAt=" + firstAssignedAt + ", vagueReason="
 				+ vagueReason + ", clarificationPrompt=" + clarificationPrompt + ", currentTextVersion="
-				+ currentTextVersion + ", duplicateState=" + duplicateState + ", createdAt=" + createdAt
+				+ currentTextVersion + ", duplicateState=" + duplicateState + ", suggestedKbId=" 
+				+ suggestedKbId + ", suggestedKbTitle=" + suggestedKbTitle + ", kbSuggestionStatus=" 
+				+ kbSuggestionStatus + ", kbSuggestionSource=" + kbSuggestionSource + ", createdAt=" + createdAt
 				+ ", updatedAt=" + updatedAt + ", createdByUserId=" + createdByUserId + ", createdByName="
 				+ createdByName + ", createdByEmail=" + createdByEmail + ", assignedToUserId=" + assignedToUserId
 				+ ", assignedToName=" + assignedToName + ", assignedToEmail=" + assignedToEmail + "]";

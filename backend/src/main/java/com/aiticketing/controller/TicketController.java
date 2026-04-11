@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
+import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
@@ -336,5 +338,70 @@ public class TicketController {
 
 	    TICKET_CONTROLLER_LOG.info("TicketController :: exit getPrimaryLink()");
 	    return ResponseEntity.ok(ApiResponseBean.success(resp));
+	}
+	
+	@Operation(
+	    summary = "User: respond to suggested KB article",
+	    description = "Allows the ticket owner to respond to the currently suggested KB article for a ticket in KB_SUGGESTED state. ACCEPTED resolves the ticket through self-service. REJECTED resumes the ticket workflow and triggers routing."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(
+	        responseCode = "200",
+	        description = "KB response recorded successfully",
+	        content = @Content(
+	            mediaType = "application/json",
+	            schema = @Schema(implementation = ApiResponseBean.class)
+	        )
+	    ),
+	    @ApiResponse(responseCode = "400", description = "Ticket is not in KB_SUGGESTED state or request is invalid"),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "404", description = "Ticket not found or no active KB suggestion found")
+	})
+	@PostMapping("/user/{ticketId}/kb-response")
+	public ResponseEntity<ApiResponseBean<UserTicketResponseBean>> respondToKbSuggestion(
+	        @PathVariable Long ticketId,
+	        @Valid @RequestBody KbSuggestionResponseRequestBean request,
+	        @AuthenticationPrincipal AuthUserPrincipal principal) {
+
+		TICKET_CONTROLLER_LOG.info("TicketController :: in respondToKbSuggestion() :: ticketId={}", ticketId);
+	    Long userId = principal.getUserId();
+
+	    UserTicketResponseBean response =
+	            ticketService.respondToKbSuggestion(userId, ticketId, request);
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit respondToKbSuggestion() :: ticketId={}", ticketId);
+	    return ResponseEntity.ok(ApiResponseBean.success("KB response recorded", response));
+	}
+	
+	@Operation(
+	    summary = "Agent: manually suggest KB article for ticket",
+	    description = "Allows the assigned agent to manually suggest a published KB article for a ticket. The ticket moves to KB_SUGGESTED and waits for the user's response."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(
+	        responseCode = "200",
+	        description = "KB article suggested successfully",
+	        content = @Content(
+	            mediaType = "application/json",
+	            schema = @Schema(implementation = ApiResponseBean.class)
+	        )
+	    ),
+	    @ApiResponse(responseCode = "400", description = "KB already suggested for this ticket, KB is not published, or request is invalid"),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "404", description = "Ticket or KB article not found")
+	})
+	@PostMapping("/agent/{ticketId}/kb/manual-suggestion")
+	public ResponseEntity<ApiResponseBean<TicketResponseBean>> suggestKbManually(
+	        @PathVariable Long ticketId,
+	        @Valid @RequestBody ManualKbSuggestionRequestBean request,
+	        @AuthenticationPrincipal AuthUserPrincipal principal) {
+
+		TICKET_CONTROLLER_LOG.info("TicketController :: in suggestKbManually() :: ticketId={}", ticketId);
+	    Long agentUserId = principal.getUserId();
+
+	    TicketResponseBean response =
+	            ticketService.suggestKbManuallyByAgent(agentUserId, ticketId, request);
+	    
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit suggestKbManually() :: ticketId={}", ticketId);
+	    return ResponseEntity.ok(ApiResponseBean.success("KB article suggested", response));
 	}
 }

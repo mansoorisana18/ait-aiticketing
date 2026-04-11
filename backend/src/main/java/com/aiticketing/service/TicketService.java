@@ -4,6 +4,8 @@ import java.util.List;
 
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
+import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
 import com.aiticketing.bean.request.UpdateTicketStatusRequestBean;
 import com.aiticketing.bean.request.UpdateVagueTicketRequestBean;
@@ -39,4 +41,7 @@ public interface TicketService {
 
 	List<ConfirmedDuplicateTicketResponseBean> getConfirmedDuplicates(Long primaryTicketId);
 	PrimaryLinkedTicketResponseBean getPrimaryLink(Long duplicateTicketId);
+	
+	UserTicketResponseBean respondToKbSuggestion(Long userId, Long ticketId, KbSuggestionResponseRequestBean req);
+	TicketResponseBean suggestKbManuallyByAgent(Long agentUserId, Long ticketId, ManualKbSuggestionRequestBean req);
 }

@@ -30,12 +30,19 @@ public class UserTicketResponseBean {
     public String vagueReason;
     public String clarificationPrompt;
     
+    //KB suggestion preview fields
+    public Long suggestedKbId;
+    public String suggestedKbTitle;
+    public String suggestedKbPreview;
+    public String kbSuggestionStatus;
+    
 	@Override
 	public String toString() {
 		return "UserTicketResponseBean [ticketId=" + ticketId + ", title=" + title + ", description=" + description
 				+ ", userTicketStatus=" + userTicketStatus + ", createdAt=" + createdAt + ", updatedAt=" + updatedAt
 				+ ", createdByUserId=" + createdByUserId + ", createdByName=" + createdByName + ", createdByEmail="
 				+ createdByEmail + ", assignedToName=" + assignedToName + ", vagueReason=" + vagueReason
-				+ ", clarificationPrompt=" + clarificationPrompt + "]";
+				+ ", clarificationPrompt=" + clarificationPrompt + ", suggestedKbId=" + suggestedKbId
+				+ ", suggestedKbTitle=" + suggestedKbTitle + ", kbSuggestionStatus=" + kbSuggestionStatus + "]";
 	}
 }
