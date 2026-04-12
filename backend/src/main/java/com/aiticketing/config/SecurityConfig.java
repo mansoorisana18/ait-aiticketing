@@ -43,7 +43,7 @@ public class SecurityConfig {
 	@Bean
     SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwtAuthFilter, ApiAuthEntryPoint apiAuthEntryPoint,
             ApiAccessDeniedHandler apiAccessDeniedHandler) throws Exception {
-		http
+		http 
 	        .csrf(csrf -> csrf.disable())	
 	        .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 	        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -83,11 +83,13 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/primary-link").hasAnyRole("AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*").hasAnyRole("AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/eligible-agents").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.POST, "/api/tickets/agent/*/kb/manual-suggestion").hasAnyRole("AGENT", "ADMIN")
 	                
-	                //user scoped Tticket endpoints
+	                //user scoped ticket endpoints
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/user/**").hasRole("USER")
 	                .requestMatchers(HttpMethod.PATCH, "/api/tickets/user/*/clarify").hasRole("USER")
-
+	                .requestMatchers(HttpMethod.POST, "/api/tickets/user/*/kb-response").hasRole("USER")
+	                
 	                //Ticket endpoints only for authenticated users
 	                .requestMatchers(HttpMethod.POST, "/api/tickets").hasAnyRole("USER", "AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAnyRole("USER", "AGENT", "ADMIN")
@@ -96,6 +98,12 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.POST, "/api/tickets/*/comments").hasAnyRole("USER", "AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/comments").hasAnyRole("USER", "AGENT", "ADMIN")
 	
+	                //KB endpoints
+	                .requestMatchers(HttpMethod.POST, "/api/kb/admin").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.PUT, "/api/kb/admin/**").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/kb/admin").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/kb/*").hasAnyRole("USER", "AGENT", "ADMIN")
+	                
 	                //Default every other requests requires auth
 	                .anyRequest().authenticated()
             )

@@ -36,7 +36,7 @@ public class KbController {
 
     @Operation(
         summary = "Admin: create KB article",
-        description = "Allows an admin to create a KB article. If publishNow is true, the article is published immediately and its embedding is generated."
+        description = "Allows an admin to create a KB article. Admin-created KB articles are published immediately and their embeddings are generated."
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -66,7 +66,7 @@ public class KbController {
 
     @Operation(
         summary = "Admin: update KB article",
-        description = "Allows an admin to update a KB article. If publishNow is true, the article becomes published and its embedding is generated or refreshed."
+        description = "Allows an admin to update a KB article. Admin-updated KB articles remain published and their embeddings are refreshed."
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -126,7 +126,7 @@ public class KbController {
 
     @Operation(
         summary = "List KB articles",
-        description = "Returns all KB articles for admin management."
+        description = "Returns all KB articles for admin management and agent."
     )
     @ApiResponses(value = {
         @ApiResponse(

@@ -1,7 +1,6 @@
 package com.aiticketing.bean.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public class CreateKbArticleRequestBean {
@@ -13,11 +12,8 @@ public class CreateKbArticleRequestBean {
     @NotBlank(message = "body is required")
     public String body;
 
-    @NotNull(message = "publishNow is required")
-    public Boolean publishNow;
-
     @Override
     public String toString() {
-        return "CreateKbArticleRequestBean [ title=" + title + ", publishNow=" + publishNow + "]";
+        return "CreateKbArticleRequestBean [ title=" + title + "]";
     }
 }

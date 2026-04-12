@@ -46,7 +46,8 @@ public class KbEmbeddingJdbcRepository {
 
     public void upsertEmbedding(Long kbId, String embeddingVector) {
         KB_EMBEDDING_REPO_LOG.info("KbEmbeddingJdbcRepository :: in upsertEmbedding() :: kbId={}", kbId);
-
+        //if insert hits an existing primary key conflict on kbe_kb_id
+        //then run the update part instead where we overwrite old embedding with the new one being inserted
         String sql = """
             INSERT INTO kb_embeddings (kbe_kb_id, kbe_embedding, kbe_created_at)
             VALUES (?, CAST(? AS vector), ?)

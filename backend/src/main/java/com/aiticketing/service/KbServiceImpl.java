@@ -62,28 +62,23 @@ public class KbServiceImpl implements KbService {
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        String finalStatus = Boolean.TRUE.equals(req.publishNow)
-                ? KbArticleStatus.PUBLISHED.name()
-                : KbArticleStatus.DRAFT.name();
 
         KbArticle kb = new KbArticle();
         kb.setTitle(req.title.trim());
         kb.setBody(req.body.trim());
-        kb.setStatus(finalStatus);
+        kb.setStatus(KbArticleStatus.PUBLISHED.name());
         kb.setCreatedBy(admin);
         kb.setLastModifiedBy(admin);
-        kb.setApprovedBy(Boolean.TRUE.equals(req.publishNow) ? admin : null);
+        kb.setApprovedBy(admin);
         kb.setAiGenerated(false);
         kb.setCreatedAt(now);
         kb.setUpdatedAt(now);
         kb.setAgentSubmittedAt(null);
-        kb.setApprovedAt(Boolean.TRUE.equals(req.publishNow) ? now : null);
+        kb.setApprovedAt(now);
 
         KbArticle saved = kbArticleRepo.save(kb);
 
-        if (KbArticleStatus.PUBLISHED.name().equals(saved.getStatus())) {
-            refreshKbEmbedding(saved);
-        }
+        refreshKbEmbedding(saved);
 
         KbArticleResponseBean resp = mapToKbArticleResponse(saved);
 
@@ -113,31 +108,15 @@ public class KbServiceImpl implements KbService {
 
         kb.setTitle(req.title.trim());
         kb.setBody(req.body.trim());
+        kb.setStatus(KbArticleStatus.PUBLISHED.name());
         kb.setLastModifiedBy(admin);
+        kb.setApprovedBy(admin);
         kb.setUpdatedAt(now);
-
-        if (Boolean.TRUE.equals(req.publishNow)) {
-            kb.setStatus(KbArticleStatus.PUBLISHED.name());
-            kb.setApprovedBy(admin);
-            if (kb.getApprovedAt() == null) {
-                kb.setApprovedAt(now);
-            }
-        } else {
-            //Keeping non-published admin edited KBs as DRAFT
-            if (!KbArticleStatus.PUBLISHED.name().equals(kb.getStatus())) {
-                kb.setStatus(KbArticleStatus.DRAFT.name());
-            }
-            kb.setApprovedBy(KbArticleStatus.PUBLISHED.name().equals(kb.getStatus()) ? kb.getApprovedBy() : null);
-            if (!KbArticleStatus.PUBLISHED.name().equals(kb.getStatus())) {
-                kb.setApprovedAt(null);
-            }
-        }
+        kb.setApprovedAt(now);
 
         KbArticle saved = kbArticleRepo.save(kb);
 
-        if (KbArticleStatus.PUBLISHED.name().equals(saved.getStatus())) {
-            refreshKbEmbedding(saved);
-        }
+        refreshKbEmbedding(saved);
 
         KbArticleResponseBean resp = mapToKbArticleResponse(saved);
 
@@ -159,7 +138,7 @@ public class KbServiceImpl implements KbService {
         KbArticle kb = kbArticleRepo.findById(kbId)
                 .orElseThrow(() -> new NotFoundException("KB article not found"));
 
-        // ADMIN and AGENT can view KB directly
+        //ADMIN and AGENT can view KB directly
         if (requester.getRole() == UserRole.ADMIN || requester.getRole() == UserRole.AGENT) {
             KbArticleResponseBean resp = mapToKbArticleResponse(kb);
             KB_SERVICE_LOG.info("KbServiceImpl :: exit getKbArticleById() :: role={} kbId={}",
@@ -167,7 +146,7 @@ public class KbServiceImpl implements KbService {
             return resp;
         }
 
-        // USER can only view a KB if it is linked to one of their own tickets
+        //USER can only view a KB if it is linked to one of their own tickets
         boolean allowed = kbSuggestionRepo.existsByKbArticle_KbIdAndTicket_CreatedBy_UserId(kbId, requesterUserId);
         if (!allowed) {
             throw new UnauthorizedException("You are not allowed to view this KB article");
@@ -200,6 +179,7 @@ public class KbServiceImpl implements KbService {
                 kbArticle.getBody()
         );
 
+        //insert-or-update kbe
         kbEmbeddingJdbcRepository.upsertEmbedding(kbArticle.getKbId(), embeddingVector);
 
         KB_SERVICE_LOG.info("KbServiceImpl :: exit refreshKbEmbedding() :: kbId={}", kbArticle.getKbId());
