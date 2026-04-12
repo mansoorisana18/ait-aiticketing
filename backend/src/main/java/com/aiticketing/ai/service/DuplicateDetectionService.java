@@ -7,6 +7,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.aiticketing.ai.PromptLoader;
@@ -27,23 +28,29 @@ public class DuplicateDetectionService {
     private final ChatClient chatClient;
     private final PromptLoader promptLoader;
     private final ObjectMapper objectMapper;
+    private final BigDecimal confirmedThreshold;
+    private final BigDecimal potentialThreshold;
 
     public DuplicateDetectionService(
             TicketEmbeddingJdbcRepository embeddingJdbcRepository,
             TicketEmbeddingGenerationService embeddingGenerationService,
             ChatClient chatClient,
             PromptLoader promptLoader,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            @Value("${aiticketing.ai.duplicate.confirmed-threshold}") BigDecimal confirmedThreshold,
+            @Value("${aiticketing.ai.duplicate.potential-threshold}") BigDecimal potentialThreshold
     ) {
         this.embeddingJdbcRepository = embeddingJdbcRepository;
         this.embeddingGenerationService = embeddingGenerationService;
         this.chatClient = chatClient;
         this.promptLoader = promptLoader;
         this.objectMapper = objectMapper;
+        this.confirmedThreshold = confirmedThreshold;
+        this.potentialThreshold = potentialThreshold;
     }
 
     public DuplicateCheckOutcome checkDuplicate(long ticketId, int textVersion, String title, String description) {
-    	DUPLICATE_LOG.info("DuplicateDetectionService :: in checkDuplicate :: ticketId={} textVersion={}}",
+        DUPLICATE_LOG.info("DuplicateDetectionService :: in checkDuplicate :: ticketId={} textVersion={}",
                 ticketId, textVersion);
     	try {
     		//1. Fetch if the ticket's embedding already exists in tickets_embeddings table
@@ -69,12 +76,12 @@ public class DuplicateDetectionService {
                 result.primaryTicketId = null;
                 result.confidence = BigDecimal.ZERO;
                 result.similarity = null;
-                result.threshold = null;
+                result.threshold = potentialThreshold;
                 result.reason = "No similar candidate tickets found";
                 return DuplicateCheckOutcome.ok(result);
             }
 
-            //5. Candidates exists, so we call LLM to give the DUPLICATE_CHECK response 
+            //5. Candidates exists, so we call LLM with configured thresholds to give the DUPLICATE_CHECK response 
             String prompt = promptLoader.loadAndFormat(
                     "prompts/duplicate_check_v1.txt",
                     Map.of(
@@ -82,7 +89,9 @@ public class DuplicateDetectionService {
                             "textVersion", String.valueOf(textVersion),
                             "title", safe(title),
                             "description", safe(description),
-                            "candidatesJson", objectMapper.writeValueAsString(candidates)
+                            "candidatesJson", objectMapper.writeValueAsString(candidates),
+                            "confirmedThreshold", confirmedThreshold.toPlainString(),
+                            "potentialThreshold", potentialThreshold.toPlainString()
                     )
             );
             
@@ -111,7 +120,7 @@ public class DuplicateDetectionService {
             result.threshold = node.path("threshold").isNumber() ? node.path("threshold").decimalValue() : null;
             result.reason = jsonTextOrNull(node, "reason");
 
-            //7. Set final DUPLICATE_CHECK AI pipeline response in DuplicateCheckOutcome
+            //7. Basic shape validation
             if (result.duplicateState == null || result.duplicateState.isBlank()) {
                 return DuplicateCheckOutcome.fail("Missing duplicateState from AI");
             }
@@ -120,16 +129,71 @@ public class DuplicateDetectionService {
                 return DuplicateCheckOutcome.fail("Invalid duplicateState from AI: " + result.duplicateState);
             }
 
+            //8. Consistency validation against configured thresholds
+            validateDuplicateDecisionConsistency(result);
+
+            //9. NONE must not carry a primary ticket
+            if ("NONE".equals(result.duplicateState)) {
+                result.primaryTicketId = null;
+            }
+
+            //10. POTENTIAL/CONFIRMED must carry a primary ticket
             if (!"NONE".equals(result.duplicateState) && result.primaryTicketId == null) {
                 return DuplicateCheckOutcome.fail("Missing primaryTicketId for duplicate outcome");
             }
 
+            DUPLICATE_LOG.info("DuplicateDetectionService :: validated duplicate decision :: ticketId={} duplicateState={} similarity={} threshold={}",
+            	    ticketId, result.duplicateState, result.similarity, result.threshold);
             return DuplicateCheckOutcome.ok(result);
 
         } catch (Exception ex) {
             DUPLICATE_LOG.error("DuplicateDetectionService :: exit checkDuplicate failed :: ticketId={} textVersion={} err={}",
                     ticketId, textVersion, ex.toString(), ex);
             return DuplicateCheckOutcome.fail("Duplicate detection failed: " + ex.getMessage());
+        }
+    }
+
+    private void validateDuplicateDecisionConsistency(DuplicateCheckResult result) {
+        if (result.similarity == null) {
+            if (!"NONE".equals(result.duplicateState)) {
+                throw new IllegalStateException("AI returned duplicate outcome without similarity");
+            }
+            return;
+        }
+
+        switch (result.duplicateState) {
+            case "CONFIRMED" -> {
+                if (result.similarity.compareTo(confirmedThreshold) < 0) {
+                    throw new IllegalStateException(
+                            "AI returned CONFIRMED but similarity is below confirmed threshold");
+                }
+                if (result.threshold == null || result.threshold.compareTo(confirmedThreshold) != 0) {
+                    throw new IllegalStateException(
+                            "AI returned CONFIRMED with incorrect threshold value");
+                }
+            }
+            case "POTENTIAL" -> {
+                if (result.similarity.compareTo(potentialThreshold) < 0
+                        || result.similarity.compareTo(confirmedThreshold) >= 0) {
+                    throw new IllegalStateException(
+                            "AI returned POTENTIAL but similarity is outside potential threshold band");
+                }
+                if (result.threshold == null || result.threshold.compareTo(potentialThreshold) != 0) {
+                    throw new IllegalStateException(
+                            "AI returned POTENTIAL with incorrect threshold value");
+                }
+            }
+            case "NONE" -> {
+                if (result.similarity.compareTo(potentialThreshold) >= 0) {
+                    throw new IllegalStateException(
+                            "AI returned NONE but similarity meets duplicate threshold");
+                }
+                if (result.threshold == null || result.threshold.compareTo(potentialThreshold) != 0) {
+                    throw new IllegalStateException(
+                            "AI returned NONE with incorrect threshold value");
+                }
+            }
+            default -> throw new IllegalStateException("Invalid duplicateState: " + result.duplicateState);
         }
     }
 
