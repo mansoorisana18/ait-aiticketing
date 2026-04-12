@@ -824,38 +824,32 @@ public class TicketServiceImpl implements TicketService {
 	    //CONFIRMED -> NONE & POTENTIAL -> NONE
 	    if (DuplicateState.NONE.name().equals(newDuplicateState)) {
 	    	
-	    	//Invalidate current ACTIVE row to REJECTED
+	    	//1. Invalidate current ACTIVE row to REJECTED
 	    	for (TicketDuplicateLink link : activeLinks) {
 		        link.setLinkStatus(DuplicateLinkStatus.REJECTED.name());
 		    }
 		    if (!activeLinks.isEmpty()) {
 		        duplicateLinkRepo.saveAll(activeLinks);
 		    }
-		    		    
+		    	
+		    //2. Reset ticket to actonable non-duplicate state 
 	        ticket.setDuplicateState(DuplicateState.NONE.name());
 	        ticket.setStatus(TicketStatus.READY);
 
-	        /*
-	         * If the ticket was previously waiting in DUPLICATE_REVIEW or had been
-	         * incorrectly marked DUPLICATE, it now becomes actionable again.
-	         * Route it only if it is still unassigned
-	         */
-	        if (ticket.getAssignedTo() == null) {
-	            OutboxEvent routingEvent = new OutboxEvent();
-	            routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
-	            routingEvent.setAggregateType(AggregateType.TICKET.name());
-	            routingEvent.setAggregateId(ticket.getTicketId());
-	            try {
-	            	routingEvent.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", ticket.getCurrentTextVersion())));
-	    	    } catch (Exception e) {
-	    	    	routingEvent.setPayload("{}");
-	    	    }
-//	            routingEvent.setPayload(toJson(Map.of("textVersion", ticket.getCurrentTextVersion())));
-	            routingEvent.setStatus("PENDING");
-	            routingEvent.setRetryCount(0);
-	            routingEvent.setCreatedAt(now);
-	            outboxEventRepo.save(routingEvent);
-	        }
+	        //3. Resume the next pipeline stage from KB SUGGESTION	    
+            OutboxEvent kbSuggestionEvent = new OutboxEvent();
+            kbSuggestionEvent.setEventType(OutboxEventType.KB_SUGGESTION_REQUESTED.name());
+            kbSuggestionEvent.setAggregateType(AggregateType.TICKET.name());
+            kbSuggestionEvent.setAggregateId(ticket.getTicketId());
+            try {
+            	kbSuggestionEvent.setPayload(objectMapper.writeValueAsString(java.util.Map.of("textVersion", ticket.getCurrentTextVersion())));
+    	    } catch (Exception e) {
+    	    	kbSuggestionEvent.setPayload("{}");
+    	    }
+            kbSuggestionEvent.setStatus("PENDING");
+            kbSuggestionEvent.setRetryCount(0);
+            kbSuggestionEvent.setCreatedAt(now);
+            outboxEventRepo.save(kbSuggestionEvent);
 
 	    } else if (DuplicateState.CONFIRMED.name().equals(newDuplicateState)) {
 	        //POTENTIAL -> CONFIRMED
