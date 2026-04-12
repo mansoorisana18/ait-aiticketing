@@ -1307,29 +1307,37 @@ public class TicketServiceImpl implements TicketService {
 	        suggestion.setRespondedAt(now);
 	        kbSuggestionRepo.save(suggestion);
 
-	        ticket.setStatus(TicketStatus.READY);
+	        boolean routingRequested = false;
+
+	        //KB SUGGESTION is REJECTED by the user, so do ROUTING if unassigned. This happens when the kb suggested source was AI
+	        if(ticket.getAssignedTo() == null) {
+	        	ticket.setStatus(TicketStatus.READY);
+	        	
+		        OutboxEvent routingEvent = new OutboxEvent();
+		        routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
+		        routingEvent.setAggregateType(AggregateType.TICKET.name());
+		        routingEvent.setAggregateId(ticketId);
+		        try {
+		            routingEvent.setPayload(objectMapper.writeValueAsString(
+		                    java.util.Map.of("textVersion", ticket.getCurrentTextVersion())
+		            ));
+		        } catch (Exception e) {
+		            routingEvent.setPayload("{}");
+		        }
+		        routingEvent.setStatus("PENDING");
+		        routingEvent.setRetryCount(0);
+		        routingEvent.setCreatedAt(now);
+		        outboxEventRepo.save(routingEvent);		        
+		        routingRequested = true;
+	        } else {
+	        	ticket.setStatus(TicketStatus.IN_PROGRESS);
+	        }	 	        
+	        
 	        ticket.setUpdatedAt(now);
 	        ticketRepo.save(ticket);
 
-	        //KB SUGGESTION is REJECTED by the user, so do ROUTING
-	        OutboxEvent routingEvent = new OutboxEvent();
-	        routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
-	        routingEvent.setAggregateType(AggregateType.TICKET.name());
-	        routingEvent.setAggregateId(ticketId);
-	        try {
-	            routingEvent.setPayload(objectMapper.writeValueAsString(
-	                    java.util.Map.of("textVersion", ticket.getCurrentTextVersion())
-	            ));
-	        } catch (Exception e) {
-	            routingEvent.setPayload("{}");
-	        }
-	        routingEvent.setStatus("PENDING");
-	        routingEvent.setRetryCount(0);
-	        routingEvent.setCreatedAt(now);
-	        outboxEventRepo.save(routingEvent);
-
-	        TICKET_SERVICE_LOG.info("TicketServiceImpl :: respondToKbSuggestion() REJECTED :: ticketId={} suggestionId={} routingRequested=true",
-	                ticketId, suggestion.getSuggestionId());
+	        TICKET_SERVICE_LOG.info("TicketServiceImpl :: respondToKbSuggestion() REJECTED :: ticketId={} suggestionId={} kbSource={} assignedTo={} routingRequested={} newStatus={}",
+	                ticketId, suggestion.getSuggestionId(), suggestion.getSource(), ticket.getAssignedTo() == null ? null : ticket.getAssignedTo().getUserId(), routingRequested, ticket.getStatus());
 	    }
 
 	    Ticket refreshed = ticketRepo.findByIdWithUsers(ticketId)
