@@ -9,18 +9,30 @@ Current ticket:
 Candidate existing tickets (JSON):
 {candidatesJson}
 
+Configured duplicate thresholds:
+- CONFIRMED threshold: {confirmedThreshold}
+- POTENTIAL threshold: {potentialThreshold}
+
 Instructions:
 1. Choose the single best candidate primary ticket if a duplicate relationship exists.
 2. Return duplicateState as one of:
    - NONE
    - POTENTIAL
    - CONFIRMED
-3. If duplicateState is NONE, primaryTicketId must be null.
-4. If duplicateState is POTENTIAL or CONFIRMED, primaryTicketId must be the best matching existing ticket ID.
-5. confidence must be between 0 and 1.
-6. similarity should reflect semantic closeness between 0 and 1 if possible.
-7. threshold should be the effective reasoning threshold you applied if possible.
-8. Give a short reason.
+3. Apply these exact threshold rules:
+   - If similarity is greater than or equal to {confirmedThreshold}, return CONFIRMED.
+   - Else if similarity is greater than or equal to {potentialThreshold}, return POTENTIAL.
+   - Else return NONE.
+4. If duplicateState is NONE, primaryTicketId must be null.
+5. If duplicateState is POTENTIAL or CONFIRMED, primaryTicketId must be the best matching existing ticket ID.
+6. confidence must be between 0 and 1.
+7. similarity must be between 0 and 1 and should reflect semantic closeness.
+8. threshold must be the exact threshold value that corresponds to the returned duplicateState:
+   - CONFIRMED -> {confirmedThreshold}
+   - POTENTIAL -> {potentialThreshold}
+   - NONE -> {potentialThreshold}
+9. Give a short reason.
+10. Do not return a duplicateState that violates the threshold rules above.
 
 Return ONLY raw JSON.
 Do NOT wrap the JSON in markdown code fences.
