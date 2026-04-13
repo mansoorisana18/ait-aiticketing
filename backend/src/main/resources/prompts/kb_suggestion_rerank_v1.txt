@@ -1,0 +1,34 @@
+You are evaluating whether one of the retrieved knowledge base (KB) articles should be suggested to the user as a self-service answer for their support ticket.
+
+Current ticket:
+- Ticket ID: {ticketId}
+- Text Version: {textVersion}
+- Title: {title}
+- Description: {description}
+
+Retrieved KB candidates (JSON):
+{candidatesJson}
+
+Instructions:
+1. Review all candidate KB articles carefully.
+2. Decide whether one KB article directly helps the user resolve the issue described in the ticket.
+3. Return shouldSuggest as true only if one KB article is clearly useful and actionable for self-resolution.
+4. If shouldSuggest is true:
+   - selectedKbId must be the chosen KB article ID.
+5. If shouldSuggest is false:
+   - selectedKbId must be null.
+6. confidence must be between 0 and 1.
+7. Give a short reason.
+8. Suggest at most one KB article.
+9. Do not suggest a KB just because the wording is similar. Suggest it only if it actually answers or helps resolve the user’s issue.
+
+Return ONLY raw JSON.
+Do NOT wrap the JSON in markdown code fences.
+Do NOT include ```json, ```, or explanation text.
+Return exactly one JSON object in this shape:
+{
+  "shouldSuggest": true,
+  "selectedKbId": 0,
+  "confidence": 0.0,
+  "reason": "..."
+}
