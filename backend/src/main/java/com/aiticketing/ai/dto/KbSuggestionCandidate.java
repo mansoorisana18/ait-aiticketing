@@ -6,15 +6,11 @@ public class KbSuggestionCandidate {
 
     public Long kbId;
     public String title;
-    public String body;
+    public String bodyPreview;
     public BigDecimal similarity;
 
     @Override
     public String toString() {
-        return "KbSuggestionCandidate{" +
-                "kbId=" + kbId +
-                ", title='" + title + '\'' +
-                ", similarity=" + similarity +
-                '}';
+        return "KbSuggestionCandidate [kbId=" + kbId + ", title='" + title + ", similarity=" + similarity +"]";
     }
 }

@@ -100,8 +100,23 @@ public class KbEmbeddingJdbcRepository {
         KbSuggestionCandidate candidate = new KbSuggestionCandidate();
         candidate.kbId = rs.getLong("kba_kb_id");
         candidate.title = rs.getString("kba_title");
-        candidate.body = rs.getString("kba_body");
+        candidate.bodyPreview = buildPreview(rs.getString("kba_body"));
         candidate.similarity = rs.getBigDecimal("similarity");
         return candidate;
+    }
+
+    private String buildPreview(String body) {
+        if (body == null) {
+            return "";
+        }
+
+        String normalized = body.replaceAll("\\s+", " ").trim();
+        int limit = 500;
+
+        if (normalized.length() <= limit) {
+            return normalized;
+        }
+
+        return normalized.substring(0, limit).trim() + "...";
     }
 }

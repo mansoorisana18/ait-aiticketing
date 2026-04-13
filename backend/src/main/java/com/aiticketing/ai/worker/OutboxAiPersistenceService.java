@@ -312,7 +312,10 @@ public class OutboxAiPersistenceService {
 		if (!DuplicateState.NONE.name().equals(result.duplicateState) && result.primaryTicketId != null) {
 			Ticket primaryTicket = ticketRepo.findById(result.primaryTicketId).orElseThrow(
 					() -> new IllegalStateException("Primary ticket not found: " + result.primaryTicketId));
-
+			
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: inserted active duplicate link :: duplicateTicketId={} primaryTicketId={} duplicateType={}",
+	                ticket.getTicketId(), result.primaryTicketId, result.duplicateState);
+			
 			TicketDuplicateLink link = new TicketDuplicateLink();
 			link.setPrimaryTicket(primaryTicket);
 			link.setDuplicateTicket(ticket);
@@ -330,8 +333,7 @@ public class OutboxAiPersistenceService {
 		//3.5) Ticket is not DUPLICATE as outcome is NONE, so insert ROUTING_REQUESTED in outbox
 		//POTENTIAL waits for admin review not kb_suggested & not routed, CONFIRMED stops here and is not kb_suggested & not routed
 		if (DuplicateState.NONE.name().equals(result.duplicateState)) {
-			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: inserted active duplicate link :: duplicateTicketId={} primaryTicketId={} duplicateType={}",
-	                ticket.getTicketId(), result.primaryTicketId, result.duplicateState);
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: no duplicate link :: duplicateType={}", result.duplicateState);
 			OutboxEvent kbEvent = new OutboxEvent();
 			kbEvent.setEventType(OutboxEventType.KB_SUGGESTION_REQUESTED.name());
 			kbEvent.setAggregateType(AggregateType.TICKET.name()); //This a part of Ticket lifecycle as we are suggesting KB for a ticketId 
@@ -342,20 +344,6 @@ public class OutboxAiPersistenceService {
 			kbEvent.setCreatedAt(now);
 			outboxRepo.save(kbEvent);
 		}
-		
-//		if (DuplicateState.NONE.name().equals(result.duplicateState)) {
-//			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: inserted active duplicate link :: duplicateTicketId={} primaryTicketId={} duplicateType={}",
-//	                ticket.getTicketId(), result.primaryTicketId, result.duplicateState);
-//			OutboxEvent routingEvent = new OutboxEvent();
-//			routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
-//			routingEvent.setAggregateType(AggregateType.TICKET.name());
-//			routingEvent.setAggregateId(work.aggregateId);
-//			routingEvent.setPayload(toJson(Map.of("textVersion", work.textVersion)));
-//			routingEvent.setStatus("PENDING");
-//			routingEvent.setRetryCount(0);
-//			routingEvent.setCreatedAt(now);
-//			outboxRepo.save(routingEvent);
-//		}
 
 		//3.7) mark outbox row of DUPLICATE_CHECK as DONE on success
 		outbox.setStatus("DONE");
@@ -395,7 +383,7 @@ public class OutboxAiPersistenceService {
                 work.textVersion,
                 AiDecisionType.KB_SUGGESTION.name(),
                 kbSuggestionJson,
-                null,
+                result.confidence,
                 result.similarity,
                 result.threshold
         ));
