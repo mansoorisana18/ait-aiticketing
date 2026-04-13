@@ -49,15 +49,16 @@ public class KbEmbeddingJdbcRepository {
         //if insert hits an existing primary key conflict on kbe_kb_id
         //then run the update part instead where we overwrite old embedding with the new one being inserted
         String sql = """
-            INSERT INTO kb_embeddings (kbe_kb_id, kbe_embedding, kbe_created_at)
-            VALUES (?, CAST(? AS vector), ?)
+            INSERT INTO kb_embeddings (kbe_kb_id, kbe_embedding, kbe_created_at, kbe_updated_at)
+            VALUES (?, CAST(? AS vector), ?, ?)
             ON CONFLICT (kbe_kb_id)
             DO UPDATE SET
                 kbe_embedding = EXCLUDED.kbe_embedding,
-                kbe_created_at = EXCLUDED.kbe_created_at
+                kbe_updated_at = EXCLUDED.kbe_updated_at
         """;
-
-        jdbcTemplate.update(sql, kbId, embeddingVector, OffsetDateTime.now());
+        
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbcTemplate.update(sql, kbId, embeddingVector, now, now);
 
         KB_EMBEDDING_REPO_LOG.info("KbEmbeddingJdbcRepository :: exit upsertEmbedding() :: kbId={}", kbId);
     }
