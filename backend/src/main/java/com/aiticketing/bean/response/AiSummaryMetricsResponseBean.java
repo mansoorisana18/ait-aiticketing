@@ -6,4 +6,5 @@ public class AiSummaryMetricsResponseBean {
 	public RoutingMetricsResponseBean routing;
 	public DuplicateMetricsResponseBean duplicate;
 	public KbSuggestionMetricsResponseBean kbSuggestion;
+	public KbDraftMetricsResponseBean kbDraft;
 }

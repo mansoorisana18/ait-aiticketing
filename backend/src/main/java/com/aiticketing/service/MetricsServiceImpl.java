@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.aiticketing.bean.response.AiSummaryMetricsResponseBean;
 import com.aiticketing.bean.response.DuplicateMetricsResponseBean;
+import com.aiticketing.bean.response.KbDraftMetricsResponseBean;
 import com.aiticketing.bean.response.KbSuggestionMetricsResponseBean;
 import com.aiticketing.bean.response.RoutingMetricsResponseBean;
 import com.aiticketing.bean.response.TicketSummaryMetricsResponseBean;
@@ -36,6 +37,7 @@ public class MetricsServiceImpl implements MetricsService {
         resp.routing = buildRoutingMetrics();
         resp.duplicate = buildDuplicateMetrics();
         resp.kbSuggestion = buildKbSuggestionMetrics();
+        resp.kbDraft = buildKbDraftMetrics();
 
         METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAdminAiSummaryMetrics()");
         return resp;
@@ -362,6 +364,82 @@ public class MetricsServiceImpl implements MetricsService {
         kb.manualSuggestionRejectionRate = calculatePercentage(manualRejectedCount, manualSuggestionCount);
 
         return kb;
+    }
+    
+    private KbDraftMetricsResponseBean buildKbDraftMetrics() {
+        KbDraftMetricsResponseBean draft = new KbDraftMetricsResponseBean();
+
+        //Outbox attempts for KB draft generation
+        long draftGenerationAttempts = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM outbox_events
+                WHERE oe_event_type = 'KB_DRAFT_REQUESTED'
+                """);
+
+        long draftGenerationSucceeded = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM outbox_events
+                WHERE oe_event_type = 'KB_DRAFT_REQUESTED'
+                  AND oe_status = 'DONE'
+                """);
+
+        //AI draft confidence from ai_decisions
+        double avgDraftConfidence = queryForDoubleValue("""
+                SELECT COALESCE(AVG(ad_confidence), 0)
+                FROM ai_decisions
+                WHERE ad_decision_type = 'KB_DRAFT'
+                """);
+
+        //Drafts submitted for review
+        long submittedForReviewCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_articles
+                WHERE kba_status = 'IN_REVIEW'
+                   OR kba_agent_submitted_at IS NOT NULL
+                """);
+
+        //Approved / rejected AI-generated drafts
+        long approvedDraftCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_articles
+                WHERE kba_is_ai_generated = true
+                  AND kba_status = 'PUBLISHED'
+                """);
+
+        long rejectedDraftCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_articles
+                WHERE kba_is_ai_generated = true
+                  AND kba_status = 'REJECTED'
+                """);
+
+        //Review turnaround: from submit to approval/rejection decision
+        double avgReviewTurnaroundHours = queryForDoubleValue("""
+                SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (kba_updated_at - kba_agent_submitted_at)) / 3600.0), 0)
+                FROM kb_articles
+                WHERE kba_agent_submitted_at IS NOT NULL
+                  AND kba_status IN ('PUBLISHED', 'REJECTED')
+                """);
+
+        long publishedAiDraftCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_articles
+                WHERE kba_is_ai_generated = true
+                  AND kba_status = 'PUBLISHED'
+                """);
+
+        draft.draftGenerationAttempts = draftGenerationAttempts;
+        draft.draftGenerationSuccessRate = calculatePercentage(draftGenerationSucceeded, draftGenerationAttempts);
+        draft.averageDraftGenerationConfidence = roundToFourDecimals(avgDraftConfidence);
+
+        draft.submittedForReviewCount = submittedForReviewCount;
+        draft.draftApprovalRate = calculatePercentage(approvedDraftCount, submittedForReviewCount);
+        draft.draftRejectionRate = calculatePercentage(rejectedDraftCount, submittedForReviewCount);
+        draft.averageReviewTurnaroundHours = roundToTwoDecimals(avgReviewTurnaroundHours);
+
+        draft.publishedAiDraftCount = publishedAiDraftCount;
+
+        return draft;
     }
     
     private TicketSummaryMetricsResponseBean buildAdminTicketSummary() {
