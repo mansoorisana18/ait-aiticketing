@@ -65,6 +65,14 @@ public class TicketResponseBean {
     public String kbSuggestionStatus;
     public String kbSuggestionSource;
     public Double suggestedKbSimilarity;
+    
+    //KB draft summary
+    public Long draftKbId;
+    public String draftKbTitle;
+    public String draftKbStatus;   //DRAFT | IN_REVIEW | PUBLISHED | REJECTED
+    public Boolean kbDraftExists;
+    public Boolean kbDraftAiGenerated;
+    public OffsetDateTime draftKbUpdatedAt;
 
     public OffsetDateTime createdAt;
     public OffsetDateTime updatedAt;

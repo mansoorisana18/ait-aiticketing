@@ -1137,6 +1137,8 @@ public class TicketServiceImpl implements TicketService {
 		
 		populateKbSuggestionDetails(t, r);
 		
+		populateKbDraftSummary(t, r);
+		
 		TICKET_SERVICE_LOG.info(
 				"TicketServiceImpl :: exit setTicketResponseBean() :: ticketId={}, status={}, assignedToUserId={}",
 				r.ticketId, r.status, r.assignedToUserId);
@@ -1521,5 +1523,28 @@ public class TicketServiceImpl implements TicketService {
 	    }
 	    
 	    return selectedComments;
+	}
+	
+	private void populateKbDraftSummary(Ticket ticket, TicketResponseBean resp) {
+	    KbArticle latestDraft = kbArticleRepo
+	            .findTopBySourceTicket_TicketIdOrderByUpdatedAtDesc(ticket.getTicketId())
+	            .orElse(null);
+
+	    if (latestDraft == null) {
+	        resp.kbDraftExists = false;
+	        resp.draftKbId = null;
+	        resp.draftKbTitle = null;
+	        resp.draftKbStatus = null;
+	        resp.kbDraftAiGenerated = null;
+	        resp.draftKbUpdatedAt = null;
+	        return;
+	    }
+
+	    resp.kbDraftExists = true;
+	    resp.draftKbId = latestDraft.getKbId();
+	    resp.draftKbTitle = latestDraft.getTitle();
+	    resp.draftKbStatus = latestDraft.getStatus();
+	    resp.kbDraftAiGenerated = latestDraft.getAiGenerated();
+	    resp.draftKbUpdatedAt = latestDraft.getUpdatedAt();
 	}
 }
