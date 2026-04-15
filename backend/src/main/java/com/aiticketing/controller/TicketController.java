@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.GenerateKbDraftRequestBean;
 import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
 import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
@@ -403,5 +404,38 @@ public class TicketController {
 	    
 	    TICKET_CONTROLLER_LOG.info("TicketController :: exit suggestKbManually() :: ticketId={}", ticketId);
 	    return ResponseEntity.ok(ApiResponseBean.success("KB article suggested", response));
+	}
+	
+	@Operation(
+	    summary = "Agent: generate KB draft from resolved ticket",
+	    description = "Allows the assigned agent to request AI generation of a KB draft using the resolved ticket and selected public comments as the source material."
+	)
+	@ApiResponses(value = {
+	    @ApiResponse(
+	        responseCode = "200",
+	        description = "KB draft generation requested successfully",
+	        content = @Content(
+	            mediaType = "application/json",
+	            schema = @Schema(implementation = ApiResponseBean.class)
+	        )
+	    ),
+	    @ApiResponse(responseCode = "400", description = "Ticket is not eligible for KB draft generation or request is invalid"),
+	    @ApiResponse(responseCode = "401", description = "Unauthorized"),
+	    @ApiResponse(responseCode = "404", description = "Ticket not found")
+	})
+	@PostMapping("/agent/{ticketId}/kb-draft/generate")
+	public ResponseEntity<ApiResponseBean<TicketResponseBean>> requestKbDraftGeneration(
+	        @PathVariable Long ticketId,
+	        @AuthenticationPrincipal AuthUserPrincipal principal,
+	        @Valid @RequestBody GenerateKbDraftRequestBean request) {
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: in requestKbDraftGeneration() :: ticketId={}", ticketId);
+
+	    Long agentUserId = principal.getUserId();
+	    TicketResponseBean response =
+	            ticketService.requestKbDraftGeneration(agentUserId, ticketId, request);
+
+	    TICKET_CONTROLLER_LOG.info("TicketController :: exit requestKbDraftGeneration() :: ticketId={}", ticketId);
+	    return ResponseEntity.ok(ApiResponseBean.success("KB draft generation requested", response));
 	}
 }

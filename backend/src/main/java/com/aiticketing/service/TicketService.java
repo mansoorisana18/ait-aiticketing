@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.GenerateKbDraftRequestBean;
 import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
 import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
@@ -44,4 +45,6 @@ public interface TicketService {
 	
 	UserTicketResponseBean respondToKbSuggestion(Long userId, Long ticketId, KbSuggestionResponseRequestBean req);
 	TicketResponseBean suggestKbManuallyByAgent(Long agentUserId, Long ticketId, ManualKbSuggestionRequestBean req);
+	
+	TicketResponseBean requestKbDraftGeneration(Long agentUserId, Long ticketId, GenerateKbDraftRequestBean req);
 }

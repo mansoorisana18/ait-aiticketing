@@ -1,7 +1,9 @@
 package com.aiticketing.service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.aiticketing.ai.Taxonomy;
 import com.aiticketing.bean.request.AdminOverrideRequestBean;
 import com.aiticketing.bean.request.CreateTicketRequestBean;
+import com.aiticketing.bean.request.GenerateKbDraftRequestBean;
 import com.aiticketing.bean.request.KbSuggestionResponseRequestBean;
 import com.aiticketing.bean.request.ManualKbSuggestionRequestBean;
 import com.aiticketing.bean.request.TicketCommentRequestBean;
@@ -1440,5 +1443,83 @@ public class TicketServiceImpl implements TicketService {
 	    int limit = 200;
 	    return body.length() <= limit ? body : body.substring(0, limit) + "...";
 	}
+	
+	@Override
+	@Transactional
+	public TicketResponseBean requestKbDraftGeneration(Long agentUserId, Long ticketId, GenerateKbDraftRequestBean req) {
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: in requestKbDraftGeneration() :: agentUserId={} ticketId={} req={}", agentUserId, ticketId, req);
 
+	    Ticket ticket = ticketRepo.findByIdWithUsers(ticketId)
+	            .orElseThrow(() -> new NotFoundException("Ticket not found"));
+
+	    if (ticket.getAssignedTo() == null || !ticket.getAssignedTo().getUserId().equals(agentUserId)) {
+	        throw new UnauthorizedException("Only the assigned agent can generate a KB draft for this ticket");
+	    }
+
+	    if (ticket.getStatus() != TicketStatus.RESOLVED) {
+	        throw new BadRequestException("KB draft can only be generated from a RESOLVED ticket");
+	    }
+
+	    if ("CONFIRMED".equalsIgnoreCase(ticket.getDuplicateState()) || ticket.getStatus() == TicketStatus.DUPLICATE) {
+	        throw new BadRequestException("KB draft cannot be generated from a confirmed duplicate ticket");
+	    }
+
+	    if (req.selectedCommentIds == null || req.selectedCommentIds.isEmpty()) {
+	        throw new BadRequestException("At least one PUBLIC comment must be selected");
+	    }
+
+	    //Load all comments visible to agent/admin for the ticket
+	    List<TicketComment> ticketComments = ticketCommentRepo.findByTicketIdWithAuthor(ticketId);
+
+	    //Validating selected comments - belongs to the same ticket, exist, are PUBLIC only
+	    List<TicketComment> selectedPublicComments = resolveSelectedPublicComments(ticketComments, req.selectedCommentIds);
+
+	    if (selectedPublicComments.isEmpty()) {
+	        throw new BadRequestException("No valid PUBLIC comments selected for KB draft generation");
+	    }
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    OutboxEvent draftEvent = new OutboxEvent();
+	    draftEvent.setEventType(OutboxEventType.KB_DRAFT_REQUESTED.name());
+	    draftEvent.setAggregateType(AggregateType.TICKET.name());
+	    draftEvent.setAggregateId(ticketId);
+
+	    try {
+	        draftEvent.setPayload(objectMapper.writeValueAsString(
+	                Map.of("textVersion", ticket.getCurrentTextVersion(),
+	                		"selectedCommentIds", req.selectedCommentIds)));
+	    } catch (Exception e) {
+	        draftEvent.setPayload("{}");
+	    }
+
+	    draftEvent.setStatus("PENDING");
+	    draftEvent.setRetryCount(0);
+	    draftEvent.setCreatedAt(now);
+	    outboxEventRepo.save(draftEvent);
+
+	    TICKET_SERVICE_LOG.info("TicketServiceImpl :: exit requestKbDraftGeneration() :: ticketId={} selectedPublicCommentCount={} outboxEventType={}",
+	            ticketId, selectedPublicComments.size(), draftEvent.getEventType());
+
+	    return setTicketResponseBean(ticket);
+	}
+	
+	private List<TicketComment> resolveSelectedPublicComments(List<TicketComment> ticketComments, List<Long> selectedCommentIds) {
+	    Map<Long, TicketComment> commentsById = ticketComments.stream().collect(Collectors.toMap(TicketComment::getCommentId, c -> c));
+
+	    List<TicketComment> selectedComments = new ArrayList<>();
+
+	    for (Long commentId : selectedCommentIds) {
+	        TicketComment comment = commentsById.get(commentId);
+	        if (comment == null) {
+	            throw new BadRequestException("Selected comment does not belong to the ticket: " + commentId);
+	        }
+	        if (comment.getVisibility() != CommentVisibility.PUBLIC) {
+	            throw new BadRequestException("Only PUBLIC comments can be used for KB draft generation. Invalid commentId: " + commentId);
+	        }
+	        selectedComments.add(comment);
+	    }
+	    
+	    return selectedComments;
+	}
 }

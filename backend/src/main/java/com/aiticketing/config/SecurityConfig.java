@@ -84,6 +84,7 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*").hasAnyRole("AGENT", "ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/*/eligible-agents").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.POST, "/api/tickets/agent/*/kb/manual-suggestion").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.POST, "/api/tickets/agent/*/kb-draft/generate").hasAnyRole("AGENT", "ADMIN")
 	                
 	                //user scoped ticket endpoints
 	                .requestMatchers(HttpMethod.GET, "/api/tickets/user/**").hasRole("USER")
@@ -103,6 +104,13 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.PUT, "/api/kb/admin/**").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/kb/admin").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/kb/*").hasAnyRole("USER", "AGENT", "ADMIN")
+//	                .requestMatchers(HttpMethod.GET, "/api/kb").hasAnyRole("AGENT", "ADMIN")
+	                
+	                //KB draft workflow
+	                .requestMatchers(HttpMethod.PUT, "/api/kb/agent/*/draft").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.POST, "/api/kb/agent/*/submit-review").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/kb/admin/review").hasRole("ADMIN")
+	                .requestMatchers(HttpMethod.POST, "/api/kb/admin/*/review-decision").hasRole("ADMIN")
 	                
 	                //Default every other requests requires auth
 	                .anyRequest().authenticated()

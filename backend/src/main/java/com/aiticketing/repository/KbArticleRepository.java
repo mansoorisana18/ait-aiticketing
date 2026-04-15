@@ -14,4 +14,5 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
     List<KbArticle> findByStatusOrderByUpdatedAtDesc(String status);
     Optional<KbArticle> findByKbIdAndStatus(Long kbId, String status);
     List<KbArticle> findAllByOrderByUpdatedAtDesc();
+    List<KbArticle> findByStatusOrderByCreatedAtDesc(String status);
 }
