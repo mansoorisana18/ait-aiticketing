@@ -104,7 +104,7 @@ public class SecurityConfig {
 	                .requestMatchers(HttpMethod.PUT, "/api/kb/admin/**").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/kb/admin").hasRole("ADMIN")
 	                .requestMatchers(HttpMethod.GET, "/api/kb/*").hasAnyRole("USER", "AGENT", "ADMIN")
-//	                .requestMatchers(HttpMethod.GET, "/api/kb").hasAnyRole("AGENT", "ADMIN")
+	                .requestMatchers(HttpMethod.GET, "/api/kb").hasAnyRole("AGENT", "ADMIN")
 	                
 	                //KB draft workflow
 	                .requestMatchers(HttpMethod.PUT, "/api/kb/agent/*/draft").hasAnyRole("AGENT", "ADMIN")
