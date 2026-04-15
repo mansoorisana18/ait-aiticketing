@@ -93,8 +93,5 @@ public class TicketComment {
 
 	public void setCreatedAt(OffsetDateTime createdAt) {
 		this.createdAt = createdAt;
-	}
-
-	
-    
+	}   
 }

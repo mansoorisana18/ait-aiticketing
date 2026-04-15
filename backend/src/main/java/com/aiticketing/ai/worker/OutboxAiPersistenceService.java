@@ -2,7 +2,10 @@ package com.aiticketing.ai.worker;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -13,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.aiticketing.ai.dto.ClaimedOutboxWork;
 import com.aiticketing.ai.dto.DuplicateCheckResult;
+import com.aiticketing.ai.dto.KbDraftGenerationResult;
 import com.aiticketing.ai.dto.KbSuggestionResult;
 import com.aiticketing.ai.dto.RoutingResult;
 import com.aiticketing.ai.dto.TriageResult;
@@ -27,6 +31,7 @@ import com.aiticketing.entity.enums.AggregateType;
 import com.aiticketing.entity.enums.AiDecisionType;
 import com.aiticketing.entity.enums.DuplicateLinkStatus;
 import com.aiticketing.entity.enums.DuplicateState;
+import com.aiticketing.entity.enums.KbArticleStatus;
 import com.aiticketing.entity.enums.KbSuggestionSource;
 import com.aiticketing.entity.enums.KbSuggestionStatus;
 import com.aiticketing.entity.enums.OutboxEventType;
@@ -44,8 +49,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * This class is to separate our transaction boundaries.
  * 1) Mark claim event ie. outbox state to PROCESSING
  * 2) Persist TRIAGE (category, priority, vague) SUCCESS
- * 3) Persist ROUTING (assignment based on aiCategory & least agent active workload) SUCCESS
- * 4) Persist failure Steps so that we can persist retry details in outbox
+ * 3) Persist DUPLICATE (similar tickets with duplicateState) SUCCESS
+ * 4) Persist KB SUGGESTION (appropriate KB article for ticket resolution) SUCCESS
+ * 5) Persist ROUTING (assignment based on aiCategory & least agent active workload) SUCCESS
+ * 6) Persist KB DRAFT (KB out of ticket's PUBLIC comments) SUCCESS
+ * 7) Persist failure Steps so that we can persist retry details in outbox
 */
 
 @Service
@@ -75,8 +83,8 @@ public class OutboxAiPersistenceService {
 		this.objectMapper = objectMapper;
 	}
 
-	// 1) CLAIM the PENDING outbox row in a new transaction & store it in
-	// ClaimedOutboxWork dto
+	//1) CLAIM the PENDING outbox row in a new transaction & store it in
+	//ClaimedOutboxWork dto
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public ClaimedOutboxWork claimEvent(Long oeId) {
 		OutboxEvent outbox = outboxRepo.findById(oeId)
@@ -93,12 +101,12 @@ public class OutboxAiPersistenceService {
 
 		OffsetDateTime now = OffsetDateTime.now();
 
-		// 1.1) mark outbox row as PROCESSING
+		//1.1) mark outbox row as PROCESSING
 		outbox.setStatus("PROCESSING");
 		outbox.setLastError(null);
 		outboxRepo.save(outbox);
 
-		// 1.2) mark the ticket row as AI_PROCESSING
+		//1.2) mark the ticket row as AI_PROCESSING
 		if (OutboxEventType.TRIAGE_REQUESTED.name().equals(outbox.getEventType())) {
 			ticket.setStatus(TicketStatus.AI_PROCESSING);
 			ticket.setAiFailed(false);
@@ -116,13 +124,17 @@ public class OutboxAiPersistenceService {
             ticket.setAiLastError(null);
             ticket.setUpdatedAt(now);
             ticketRepo.save(ticket);
+        } else if (OutboxEventType.KB_DRAFT_REQUESTED.name().equals(outbox.getEventType())) {
+            ticket.setAiLastError(null);
+            ticket.setUpdatedAt(now);
+            ticketRepo.save(ticket);
         }
 
 		PERSISTENCE_LOG.debug(
 				"OutboxAiPersistenceService :: in claimEvent() :: start marked PROCESSING :: oeId={} retryCount={}",
 				outbox.getOeId(), outbox.getRetryCount());
 
-		// Save row in-memory dto
+		//Save row in-memory dto
 		ClaimedOutboxWork work = new ClaimedOutboxWork();
 		work.outboxId = outbox.getOeId();
 		work.eventType = outbox.getEventType();
@@ -131,7 +143,13 @@ public class OutboxAiPersistenceService {
 		work.ticketTitle = ticket.getTitle();
 		work.ticketDescription = ticket.getDescription();
 		work.ticketAiCategory = ticket.getAiCategory();
+		work.selectedCommentIds = payloadSelectedCommentIds(outbox.getPayload());
 
+		if (OutboxEventType.KB_DRAFT_REQUESTED.name().equals(work.eventType)) {
+		    PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: claimEvent() :: KB_DRAFT_REQUESTED selectedCommentIds={}",
+		            work.selectedCommentIds);
+		}
+		
 		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit claimEvent() :: oeId={} eventType={} ticketId={}",
 				work.outboxId, work.eventType, work.aggregateId);
 
@@ -149,11 +167,10 @@ public class OutboxAiPersistenceService {
 
 		OffsetDateTime now = OffsetDateTime.now();
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: in persistTriageSuccess() :: oeId={} eventType={} ticketId={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistTriageSuccess() :: oeId={} eventType={} ticketId={}",
 				work.outboxId, work.eventType, work.aggregateId);
 
-		// 2.2) update ticket with successful AI triage results & status as READY
+		//2.2) update ticket with successful AI triage results & status as READY
 		ticket.setAiCategory(result.category);
 		ticket.setAiPriority(result.priority);
 		ticket.setAiConfidence(result.confidence);
@@ -163,8 +180,7 @@ public class OutboxAiPersistenceService {
 		ticket.setUpdatedAt(now);
 
 		if (Boolean.TRUE.equals(result.isVague)) {
-			PERSISTENCE_LOG.debug(
-					"OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is VAGUE :: oeId={} ticketId={}",
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is VAGUE :: oeId={} ticketId={}",
 					work.outboxId, work.aggregateId);
 			ticket.setStatus(TicketStatus.VAGUE);
 			ticket.setVagueCount(ticket.getVagueCount() == null ? 1 : ticket.getVagueCount() + 1);
@@ -172,8 +188,7 @@ public class OutboxAiPersistenceService {
 			ticket.setVagueReason(result.vagueReason);
 			ticket.setClarificationPrompt(result.clarificationPrompt);
 		} else {
-			PERSISTENCE_LOG.debug(
-					"OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is READY :: oeId={} ticketId={}",
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is READY :: oeId={} ticketId={}",
 					work.outboxId, work.aggregateId);
 			ticket.setStatus(TicketStatus.READY);
 			ticket.setVagueReason(null);
@@ -182,19 +197,15 @@ public class OutboxAiPersistenceService {
 
 		ticketRepo.save(ticket);
 
-		// 4.1) Persist AI decisions for audit + dashboards in ai_decisions table (for
-		// classification)
+		//4.1) Persist AI decisions for audit + dashboards in ai_decisions table (for classification)
 		aiDecisionRepo.save(buildDecision(work.aggregateId, work.textVersion, AiDecisionType.CLASSIFICATION.name(),
 				Map.of("category", result.category), result.confidence, null, null));
 
-		// 4.2) Persist AI decisions for audit + dashboards in ai_decisions table (for
-		// Priority)
+		//4.2) Persist AI decisions for audit + dashboards in ai_decisions table (for Priority)
 		aiDecisionRepo.save(buildDecision(work.aggregateId, work.textVersion, AiDecisionType.PRIORITY.name(),
 				Map.of("priority", result.priority.name()), result.confidence, null, null));
 
-		// 4.3) Persist AI decisions for audit + dashboards in ai_decisions table (for
-		// Vague)
-		// map.of doesnt allow null keys or values
+		//4.3) Persist AI decisions for audit + dashboards in ai_decisions table (for Vague)
 		Map<String, Object> vagueJson = new LinkedHashMap<>();
 		vagueJson.put("isVague", result.isVague);
 		vagueJson.put("vagueReason", result.vagueReason);
@@ -202,28 +213,12 @@ public class OutboxAiPersistenceService {
 		aiDecisionRepo.save(buildDecision(work.aggregateId, work.textVersion, AiDecisionType.VAGUE_CHECK.name(),
 				vagueJson, result.confidence, null, null));
 
-		PERSISTENCE_LOG.debug(
-				"OutboxAiPersistenceService :: in persistTriageSuccess() :: Added TRIAGE steps in ai_decisions table :: oeId={} ticketId={}",
+		PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Added TRIAGE steps in ai_decisions table :: oeId={} ticketId={}",
 				work.outboxId, work.aggregateId);
 
-		/*
-		 * //Insert event_type ROUTNG_REQUESTED as PENDING in outbox table if ticket is
-		 * not VAGUE if (!Boolean.TRUE.equals(result.isVague)) { PERSISTENCE_LOG.
-		 * debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Inserting ROUTING_REQUESTED in outbox :: oeId={} ticketId={}"
-		 * , work.outboxId, work.aggregateId); OutboxEvent routingEvent = new
-		 * OutboxEvent();
-		 * routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
-		 * routingEvent.setAggregateType(AggregateType.TICKET.name());
-		 * routingEvent.setAggregateId(work.aggregateId);
-		 * routingEvent.setPayload(toJson(Map.of("textVersion", work.textVersion)));
-		 * routingEvent.setStatus("PENDING"); routingEvent.setRetryCount(0);
-		 * routingEvent.setCreatedAt(now); outboxRepo.save(routingEvent); }
-		 */
-
-		// Insert event_type DUPLICATE_CHECK_REQUESTED as PENDING in outbox table if ticket is not VAGUE
+		//Insert event_type DUPLICATE_CHECK_REQUESTED as PENDING in outbox table if ticket is not VAGUE
 		if (!Boolean.TRUE.equals(result.isVague)) {
-			PERSISTENCE_LOG.debug(
-					"OutboxAiPersistenceService :: in persistTriageSuccess() :: Inserting DUPLICATE_CHECK_REQUESTED in outbox :: oeId={} ticketId={}",
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Inserting DUPLICATE_CHECK_REQUESTED in outbox :: oeId={} ticketId={}",
 					work.outboxId, work.aggregateId);
 			OutboxEvent duplicateEvent = new OutboxEvent();
 			duplicateEvent.setEventType(OutboxEventType.DUPLICATE_CHECK_REQUESTED.name());
@@ -236,15 +231,14 @@ public class OutboxAiPersistenceService {
 			outboxRepo.save(duplicateEvent);
 		}
 
-		// 5.1)mark outbox row as DONE on success
+		//5.1)mark outbox row as DONE on success
 		outbox.setStatus("DONE");
 		outbox.setProcessedAt(now);
 		outbox.setNextRunAt(null);
 		outbox.setLastError(null);
 		outboxRepo.save(outbox);
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: exit persistTriageSuccess() :: oeId={} eventType={} ticketId={} isVague={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistTriageSuccess() :: oeId={} eventType={} ticketId={} isVague={}",
 				work.outboxId, work.eventType, work.aggregateId, result.isVague);
 	}
 
@@ -259,8 +253,7 @@ public class OutboxAiPersistenceService {
 
 		OffsetDateTime now = OffsetDateTime.now();
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: oeId={} eventType={} ticketId={} duplicateState={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: oeId={} eventType={} ticketId={} duplicateState={}",
 				work.outboxId, work.eventType, work.aggregateId, result.duplicateState);
 
 		/*
@@ -293,7 +286,6 @@ public class OutboxAiPersistenceService {
 			ticket.setAssignedTo(null);
 		}
 
-//        ticket.setUpdatedAt(now);
 		ticketRepo.save(ticket);
 
 		//3.3) Persist DUPLICATE_CHECK in ai_decisions table
@@ -302,8 +294,7 @@ public class OutboxAiPersistenceService {
 		duplicateJson.put("primaryTicketId", result.primaryTicketId);
 		duplicateJson.put("reason", result.reason);
 
-		PERSISTENCE_LOG.debug(
-				"OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: before saving DUPLICATE_CHECK decision in ai_decisions :: ticketId={}",
+		PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistDuplicateCheckSuccess() :: before saving DUPLICATE_CHECK decision in ai_decisions :: ticketId={}",
 				work.aggregateId);
 		aiDecisionRepo.save(buildDecision(work.aggregateId, work.textVersion, AiDecisionType.DUPLICATE_CHECK.name(),
 				duplicateJson, result.confidence, result.similarity, result.threshold));
@@ -345,19 +336,18 @@ public class OutboxAiPersistenceService {
 			outboxRepo.save(kbEvent);
 		}
 
-		//3.7) mark outbox row of DUPLICATE_CHECK as DONE on success
+		//3.6) mark outbox row of DUPLICATE_CHECK as DONE on success
 		outbox.setStatus("DONE");
 		outbox.setProcessedAt(now);
 		outbox.setNextRunAt(null);
 		outbox.setLastError(null);
 		outboxRepo.save(outbox);
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: exit persistDuplicateCheckSuccess() :: DUPLICATE done :: oeId={} ticketId={} duplicateState={} primaryTicketId={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistDuplicateCheckSuccess() :: DUPLICATE done :: oeId={} ticketId={} duplicateState={} primaryTicketId={}",
 				outbox.getOeId(), work.aggregateId, result.duplicateState, result.primaryTicketId);
 	}
 	
-	//4.
+	//4) Persist KB SUGGESTION (appropriate KB article for ticket resolution) SUCCESS in a fresh transaction even
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
     public void persistKbSuggestionSuccess(ClaimedOutboxWork work, KbSuggestionResult result) {
         OutboxEvent outbox = outboxRepo.findById(work.outboxId)
@@ -368,8 +358,7 @@ public class OutboxAiPersistenceService {
 
         OffsetDateTime now = OffsetDateTime.now();
 
-        PERSISTENCE_LOG.info(
-                "OutboxAiPersistenceService :: in persistKbSuggestionSuccess() :: oeId={} eventType={} ticketId={} suggestionFound={}",
+        PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistKbSuggestionSuccess() :: oeId={} eventType={} ticketId={} suggestionFound={}",
                 work.outboxId, work.eventType, work.aggregateId, result.suggestionFound);
 
         Map<String, Object> kbSuggestionJson = new LinkedHashMap<>();
@@ -427,13 +416,12 @@ public class OutboxAiPersistenceService {
         outbox.setLastError(null);
         outboxRepo.save(outbox);
 
-        PERSISTENCE_LOG.info(
-                "OutboxAiPersistenceService :: exit persistKbSuggestionSuccess() :: oeId={} ticketId={} suggestionFound={} kbId={}",
+        PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistKbSuggestionSuccess() :: oeId={} ticketId={} suggestionFound={} kbId={}",
                 outbox.getOeId(), work.aggregateId, result.suggestionFound, result.kbId);
     }
 
-	// 5) Persist ROUTING (assignment) SUCCESS in a fresh transaction even
-	// NO_ELIGIBLE_AGENT is still a successful completion of the routing step
+	//5) Persist ROUTING (assignment) SUCCESS in a fresh transaction even
+	//NO_ELIGIBLE_AGENT is still a successful completion of the routing step
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void persistRoutingSuccess(ClaimedOutboxWork work, RoutingResult routingResult) {
 		OutboxEvent outbox = outboxRepo.findById(work.outboxId)
@@ -454,15 +442,13 @@ public class OutboxAiPersistenceService {
 				ticket.setFirstAssignedAt(now);
 		}
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: in persistRoutingSuccess() :: oeId={} eventType={} ticketId={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistRoutingSuccess() :: oeId={} eventType={} ticketId={}",
 				work.outboxId, work.eventType, work.aggregateId);
 
 		ticket.setUpdatedAt(now);
 		ticketRepo.save(ticket);
 
-		PERSISTENCE_LOG.debug(
-				"OutboxAiPersistenceService :: in persistRoutingSuccess() :: before saving ROUTING decision in ai_decisions :: ticketId={}",
+		PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistRoutingSuccess() :: before saving ROUTING decision in ai_decisions :: ticketId={}",
 				work.aggregateId);
 		
 		Map<String, Object> routingJson = new LinkedHashMap<>();
@@ -486,13 +472,80 @@ public class OutboxAiPersistenceService {
 		outbox.setLastError(null);
 		outboxRepo.save(outbox);
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: exit persistRoutingSuccess() :: ROUTING done :: oeId={} ticketId={} outcome={} selectedAgentId={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistRoutingSuccess() :: ROUTING done :: oeId={} ticketId={} outcome={} selectedAgentId={}",
 				outbox.getOeId(), work.aggregateId, routingResult.outcome, routingResult.selectedAgentId);
 	}
+	
+	//6) Persist KB DRAFT (KB out of ticket's PUBLIC comments) SUCCESS in a fresh transaction even
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public void persistKbDraftSuccess(ClaimedOutboxWork work, KbDraftGenerationResult result) {
+	    OutboxEvent outbox = outboxRepo.findById(work.outboxId)
+	            .orElseThrow(() -> new IllegalStateException("OutboxEvent not found: " + work.outboxId));
 
-	// 6) Persist step FAILURE in a fresh transaction so that retry state is not
-	// lost after rollback-only errors
+	    Ticket ticket = ticketRepo.findById(work.aggregateId)
+	            .orElseThrow(() -> new IllegalStateException("Ticket not found: " + work.aggregateId));
+
+	    OffsetDateTime now = OffsetDateTime.now();
+
+	    PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistKbDraftSuccess() :: oeId={} eventType={} ticketId={} draftTitle={}",
+	            work.outboxId, work.eventType, work.aggregateId, result.title);
+
+	    //6.1) Persist AI audit in ai_decisions
+	    Object rawJsonObject;
+	    try {
+	        rawJsonObject = objectMapper.readValue(result.rawOutputJson, Map.class);
+	    } catch (Exception e) {
+	        rawJsonObject = Map.of(
+	                "title", result.title,
+	                "body", result.body,
+	                "confidence", result.confidence,
+	                "reason", result.reason
+	        );
+	    }
+
+	    aiDecisionRepo.save(buildDecision(
+            work.aggregateId,
+            work.textVersion,
+            AiDecisionType.KB_DRAFT.name(),
+            rawJsonObject,
+            result.confidence,
+            null,
+            null
+	    ));
+
+	    //6.2) Create editable DRAFT row in kb_articles
+	    if (ticket.getAssignedTo() == null) {
+	        throw new IllegalStateException("Resolved ticket has no assigned agent for KB draft creation");
+	    }
+
+	    KbArticle draft = new KbArticle();
+	    draft.setTitle(result.title);
+	    draft.setBody(result.body);
+	    draft.setStatus(KbArticleStatus.DRAFT.name());
+	    draft.setCreatedBy(ticket.getAssignedTo());
+	    draft.setSourceTicket(ticket);
+	    draft.setLastModifiedBy(ticket.getAssignedTo());
+	    draft.setApprovedBy(null);
+	    draft.setAiGenerated(true);
+	    draft.setCreatedAt(now);
+	    draft.setUpdatedAt(now);
+	    draft.setAgentSubmittedAt(null);
+	    draft.setApprovedAt(null);
+
+	    kbArticleRepo.save(draft);
+
+	    //6.3) Mark outbox done
+	    outbox.setStatus("DONE");
+	    outbox.setProcessedAt(now);
+	    outbox.setNextRunAt(null);
+	    outbox.setLastError(null);
+	    outboxRepo.save(outbox);
+
+	    PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistKbDraftSuccess() :: oeId={} ticketId={} kbDraftTitle={}",
+	            outbox.getOeId(), work.aggregateId, result.title);
+	}
+
+	//7) Persist step FAILURE in a fresh transaction so that retry state is not lost after rollback-only errors
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void persistStepFailure(ClaimedOutboxWork work, String error, int maxRetries) {
 		OutboxEvent outbox = outboxRepo.findById(work.outboxId)
@@ -504,42 +557,39 @@ public class OutboxAiPersistenceService {
 		int nextRetryCount = (outbox.getRetryCount() == null ? 0 : outbox.getRetryCount()) + 1;
 		String truncatedError = deriveErrorMessage(error);
 
-		PERSISTENCE_LOG.info(
-				"OutboxAiPersistenceService :: in persistStepFailure() :: oeId={} ticketId={} truncatedError={}",
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistStepFailure() :: oeId={} ticketId={} truncatedError={}",
 				outbox.getOeId(), work.aggregateId, truncatedError);
 		outbox.setRetryCount(nextRetryCount);
 		outbox.setLastError(truncatedError);
 
 		if (nextRetryCount >= maxRetries) {
-			// 3B.1) Permanent Failure i.e. 5 retries done still failed. Mark outbox row as
-			// FAILED
+			//3B.1) Permanent Failure i.e. 5 retries done still failed. Mark outbox row as FAILED
 			outbox.setStatus("FAILED");
 			outbox.setProcessedAt(OffsetDateTime.now());
 			outbox.setNextRunAt(null);
 			outboxRepo.save(outbox);
 
-			// Only TRIAGE failure should mark high-level AI failure on ticket table's
-			// column ticket_ai_failed
+			//Only TRIAGE failure should mark high-level AI failure on ticket table's column ticket_ai_failed
 			if (OutboxEventType.TRIAGE_REQUESTED.name().equals(outbox.getEventType())) {
-				// 3B.2) Mark ticket as READY though ai_failed TRUE for indicating manual triage needed
+				//3B.2) Mark ticket as READY though ai_failed TRUE for indicating manual triage needed
 				ticket.setAiFailed(true);
 				ticket.setAiLastError(truncatedError);
 				ticket.setStatus(TicketStatus.READY);
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticketRepo.save(ticket);
 			} else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType) 
-					|| OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)) {
+					|| OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)
+					|| OutboxEventType.KB_DRAFT_REQUESTED.name().equals(work.eventType)) {
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticket.setAiLastError(truncatedError);
 				ticketRepo.save(ticket);
 			} else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
-				// ROUTING failure won't erase TRIAGE success/fail or mark AI failure in tickets table
+				//ROUTING failure won't erase TRIAGE success/fail or mark AI failure in tickets table
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticketRepo.save(ticket);
 			}
 
-			PERSISTENCE_LOG.error(
-					"OutboxAiPersistenceService :: exit persistStepFailure() permanent FAILED :: oeId={} ticketId={} eventType={} retryCount={} err={}",
+			PERSISTENCE_LOG.error("OutboxAiPersistenceService :: exit persistStepFailure() permanent FAILED :: oeId={} ticketId={} eventType={} retryCount={} err={}",
 					outbox.getOeId(), work.aggregateId, outbox.getEventType(), nextRetryCount, truncatedError);
 		} else {
 			//3C.1) Retry the outbox row change status for PROCESSING -> PENDING again
@@ -555,19 +605,18 @@ public class OutboxAiPersistenceService {
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticketRepo.save(ticket);
 			} else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType) 
-					|| OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)) {
+					|| OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)
+					|| OutboxEventType.KB_DRAFT_REQUESTED.name().equals(work.eventType)) {
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticket.setAiLastError(truncatedError);
 				ticketRepo.save(ticket);
 			} else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
-				// ROUTING retry should not change READY business status
+				//ROUTING retry should not change READY business status
 				ticket.setUpdatedAt(OffsetDateTime.now());
 				ticketRepo.save(ticket);
 			}
-			PERSISTENCE_LOG.warn(
-					"OutboxAiPersistenceService :: exit persistStepFailure() retry scheduled :: oeId={} ticketId={} eventType={} retryCount={} nextRunAt={} err={}",
-					outbox.getOeId(), work.aggregateId, outbox.getEventType(), nextRetryCount, outbox.getNextRunAt(),
-					truncatedError);
+			PERSISTENCE_LOG.warn("OutboxAiPersistenceService :: exit persistStepFailure() retry scheduled :: oeId={} ticketId={} eventType={} retryCount={} nextRunAt={} err={}",
+					outbox.getOeId(), work.aggregateId, outbox.getEventType(), nextRetryCount, outbox.getNextRunAt(), truncatedError);
 		}
 	}
 
@@ -630,4 +679,29 @@ public class OutboxAiPersistenceService {
 		return s.length() <= max ? s : s.substring(0, max);
 	}
 
+	private List<Long> payloadSelectedCommentIds(String payload) {
+	    try {
+	        if (payload == null || payload.isBlank()) {
+	            return Collections.emptyList();
+	        }
+
+	        Map<?, ?> map = objectMapper.readValue(payload, Map.class);
+	        Object raw = map.get("selectedCommentIds");
+
+	        if (!(raw instanceof List<?> rawList)) {
+	            return Collections.emptyList();
+	        }
+
+	        List<Long> ids = new ArrayList<>();
+	        for (Object item : rawList) {
+	            if (item != null) {
+	                ids.add(Long.parseLong(item.toString()));
+	            }
+	        }
+	        return ids;
+
+	    } catch (Exception e) {
+	        return Collections.emptyList();
+	    }
+	}
 }

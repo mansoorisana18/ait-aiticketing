@@ -6,12 +6,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.aiticketing.ai.dto.ClaimedOutboxWork;
+import com.aiticketing.ai.dto.KbDraftGenerationOutcome;
 import com.aiticketing.ai.dto.KbSuggestionOutcome;
 import com.aiticketing.ai.dto.RoutingResult;
 import com.aiticketing.ai.dto.TriageOutcome;
 import com.aiticketing.ai.dto.TriageResult;
 import com.aiticketing.ai.service.AiTriageService;
 import com.aiticketing.ai.service.DuplicateDetectionService;
+import com.aiticketing.ai.service.KbDraftGenerationService;
 import com.aiticketing.ai.service.KbSuggestionService;
 import com.aiticketing.ai.service.RoutingService;
 import com.aiticketing.entity.Ticket;
@@ -28,6 +30,7 @@ public class OutboxAiOrchestrator {
     private final OutboxAiPersistenceService persistenceService;
     private final DuplicateDetectionService duplicateDetectionService;
     private final KbSuggestionService kbSuggestionService;
+    private final KbDraftGenerationService kbDraftGenerationService;
     private final AiTriageService triageService;
     private final RoutingService routingService;
     private final TicketRepository ticketRepo;
@@ -37,6 +40,7 @@ public class OutboxAiOrchestrator {
             DuplicateDetectionService duplicateDetectionService,
             KbSuggestionService kbSuggestionService,
             OutboxAiPersistenceService persistenceService,
+            KbDraftGenerationService kbDraftGenerationService,
             AiTriageService triageService,
             RoutingService routingService,
             TicketRepository ticketRepo
@@ -44,6 +48,7 @@ public class OutboxAiOrchestrator {
         this.maxRetries = maxRetries;
         this.duplicateDetectionService = duplicateDetectionService;
         this.kbSuggestionService = kbSuggestionService;
+        this.kbDraftGenerationService = kbDraftGenerationService;
         this.persistenceService = persistenceService;
         this.triageService = triageService;
         this.routingService = routingService;
@@ -69,6 +74,8 @@ public class OutboxAiOrchestrator {
                 handleKbSuggestion(work);
             } else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
                 handleRouting(work);
+            } else if (OutboxEventType.KB_DRAFT_REQUESTED.name().equals(work.eventType)) {
+                handleKbDraftGeneration(work);
             } else {
                 persistenceService.persistStepFailure(work,
                         "Unsupported event type: " + work.eventType,
@@ -171,5 +178,30 @@ public class OutboxAiOrchestrator {
 
         ORCHESTRATOR_LOG.info("OutboxAiOrchestrator :: handleRouting() success :: oeId={} ticketId={} outcome={} selectedAgentId={}",
                 work.outboxId, work.aggregateId, routingResult.outcome, routingResult.selectedAgentId);
+    }
+    
+    private void handleKbDraftGeneration(ClaimedOutboxWork work) {
+        ORCHESTRATOR_LOG.info(
+                "OutboxAiOrchestrator :: in handleKbDraftGeneration() start :: oeId={} ticketId={} textVersion={} selectedCommentIds={}",
+                work.outboxId, work.aggregateId, work.textVersion, work.selectedCommentIds);
+
+        KbDraftGenerationOutcome outcome = kbDraftGenerationService.generateDraft(
+                work.aggregateId,
+                work.textVersion,
+                work.ticketTitle,
+                work.ticketDescription,
+                work.ticketAiCategory,
+                work.selectedCommentIds
+        );
+
+        if (!outcome.success) {
+            throw new RuntimeException(outcome.error);
+        }
+
+        persistenceService.persistKbDraftSuccess(work, outcome.result);
+
+        ORCHESTRATOR_LOG.info(
+                "OutboxAiOrchestrator :: handleKbDraftGeneration() success :: oeId={} ticketId={} draftTitle={}",
+                work.outboxId, work.aggregateId, outcome.result.title);
     }
 }
