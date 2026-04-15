@@ -124,9 +124,9 @@ export default function AnalyticsPage() {
       />
 
       <MetricCard
-        title="Resolved Through Primary Count"
+        title="Auto-Resolved Through Primary Count"
         value={duplicate.resolvedThroughPrimaryCount}
-        summary="Duplicates resolved via primary ticket lifecycle."
+        summary="Duplicates auto-resolved via primary ticket lifecycle."
         interpretation="Shows successful consolidation."
         calculation="Count of duplicate tickets resolved through linked primary resolution."
       />
