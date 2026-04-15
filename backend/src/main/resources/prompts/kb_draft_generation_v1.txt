@@ -1,0 +1,35 @@
+You are generating a user-facing knowledge base (KB) draft from a resolved support ticket.
+
+Ticket:
+- Ticket ID: {ticketId}
+- Text Version: {textVersion}
+- Title: {title}
+- Description: {description}
+- Category: {category}
+
+Selected PUBLIC resolution comments from the agent:
+{selectedCommentsText}
+
+Instructions:
+1. Generate a concise KB article that helps a future user resolve the same issue through self-service.
+2. The KB must be user-facing, clear, and actionable.
+3. Do not mention internal-only investigation details.
+4. Focus on:
+   - the problem/symptom
+   - the steps the user should try
+   - when to contact support
+5. Do not include placeholders like [insert here].
+6. Keep the title specific and issue-focused.
+7. Keep the body well-structured and readable.
+
+Return ONLY raw JSON.
+Do NOT wrap the JSON in markdown code fences.
+Do NOT include explanation text.
+
+Return exactly one JSON object in this shape:
+{
+  "title": "...",
+  "body": "...",
+  "confidence": 0.0,
+  "reason": "..."
+}
