@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.aiticketing.bean.response.AiSummaryMetricsResponseBean;
 import com.aiticketing.bean.response.DuplicateMetricsResponseBean;
+import com.aiticketing.bean.response.KbSuggestionMetricsResponseBean;
 import com.aiticketing.bean.response.RoutingMetricsResponseBean;
 import com.aiticketing.bean.response.TicketSummaryMetricsResponseBean;
 import com.aiticketing.bean.response.TriageMetricsResponseBean;
@@ -34,6 +35,7 @@ public class MetricsServiceImpl implements MetricsService {
         resp.triage = buildTriageMetrics();
         resp.routing = buildRoutingMetrics();
         resp.duplicate = buildDuplicateMetrics();
+        resp.kbSuggestion = buildKbSuggestionMetrics();
 
         METRICS_SERVICE_LOG.info("MetricsServiceImpl :: exit getAdminAiSummaryMetrics()");
         return resp;
@@ -284,6 +286,82 @@ public class MetricsServiceImpl implements MetricsService {
         duplicate.resolvedThroughPrimaryCount = resolvedThroughPrimaryCount;
 
         return duplicate;
+    }
+    
+    private KbSuggestionMetricsResponseBean buildKbSuggestionMetrics() {
+        KbSuggestionMetricsResponseBean kb = new KbSuggestionMetricsResponseBean();
+
+        //How many KB suggestion attempts ran through AI stage
+        long suggestionAttempts = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM ai_decisions
+                WHERE ad_decision_type = 'KB_SUGGESTION'
+                """);
+
+        //How many AI attempts actually produced a suggestion
+        long aiSuggestionsCreated = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'AI'
+                """);
+
+        //AI suggestion confidence + similarity from ai_decisions
+        Map<String, Object> aiStatsRow = queryForSingleRow("""
+                SELECT
+                  COALESCE(AVG(ad_confidence), 0) AS avg_confidence,
+                  COALESCE(AVG(ad_similarity), 0) AS avg_similarity
+                FROM ai_decisions
+                WHERE ad_decision_type = 'KB_SUGGESTION'
+                  AND ad_output_json ->> 'suggestionFound' = 'true'
+                """);
+
+        //AI suggestion acceptance / rejection
+        long aiAcceptedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'AI'
+                  AND kbs_status = 'ACCEPTED'
+                """);
+
+        long aiRejectedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'AI'
+                  AND kbs_status = 'REJECTED'
+                """);
+
+        //Manual suggestion counts + outcomes
+        long manualSuggestionCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'MANUAL_AGENT'
+                """);
+
+        long manualAcceptedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'MANUAL_AGENT'
+                  AND kbs_status = 'ACCEPTED'
+                """);
+
+        long manualRejectedCount = queryForLongValue("""
+                SELECT COUNT(*)
+                FROM kb_suggestions
+                WHERE kbs_source = 'MANUAL_AGENT'
+                  AND kbs_status = 'REJECTED'
+                """);
+
+        kb.suggestionAttempts = suggestionAttempts;        
+        kb.averageSuggestionConfidence = roundToFourDecimals(getDouble(aiStatsRow, "avg_confidence"));
+        kb.averageSuggestionSimilarity = roundToFourDecimals(getDouble(aiStatsRow, "avg_similarity"));
+        kb.autoSuggestionAcceptanceRate = calculatePercentage(aiAcceptedCount, aiSuggestionsCreated);
+        kb.autoSuggestionRejectionRate = calculatePercentage(aiRejectedCount, aiSuggestionsCreated);
+
+        kb.manualSuggestionCount = manualSuggestionCount;
+        kb.manualSuggestionAcceptanceRate = calculatePercentage(manualAcceptedCount, manualSuggestionCount);
+        kb.manualSuggestionRejectionRate = calculatePercentage(manualRejectedCount, manualSuggestionCount);
+
+        return kb;
     }
     
     private TicketSummaryMetricsResponseBean buildAdminTicketSummary() {
