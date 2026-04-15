@@ -218,7 +218,7 @@ public class MetricsServiceImpl implements MetricsService {
         long duplicateReviewQueueSize = queryForLongValue("""
                 SELECT COUNT(*)
                 FROM tickets
-                WHERE ticket_status::text = 'DUPLICATE_REVIEW'
+                WHERE ticket_status = 'DUPLICATE_REVIEW'
                 """);
 
         double avgPotentialReviewTimeMinutes = queryForDoubleValue("""
@@ -254,15 +254,18 @@ public class MetricsServiceImpl implements MetricsService {
                 WHERE ticket_duplicate_state = 'CONFIRMED'
                 """);
 
-        long resolvedThroughPrimarCount = queryForLongValue("""
+        long resolvedThroughPrimaryCount = queryForLongValue("""
                 SELECT COUNT(*)
                 FROM ticket_duplicate_links tdl
-                JOIN tickets t
-        		  ON t.ticket_id = tdl.tdl_duplicate_ticket_id
-                WHERE tdl.tdl_duplicate)type = 'CONFIRMED'
+                JOIN tickets dup
+        		  ON dup.ticket_id = tdl.tdl_duplicate_ticket_id
+        		JOIN tickets prim
+        		  ON prim.ticket_id = tdl.tdl_primary_ticket_id
+                WHERE tdl.tdl_duplicate_type = 'CONFIRMED'
                   AND tdl.tdl_link_status = 'ACTIVE'
                   AND tdl.tdl_propagate_resolution = true
-                  AND t.tickt_status::text IN ('RESOLVED', 'CLOSED')                                    
+                  AND dup.ticket_status IN ('RESOLVED', 'CLOSED')  
+                  AND prim.ticket_status IN ('RESOLVED', 'CLOSED')                                  
         		""");
         
         duplicate.duplicateChecksAttempted = duplicateChecksAttempted;
@@ -278,7 +281,7 @@ public class MetricsServiceImpl implements MetricsService {
         duplicate.potentialConfirmationRate = calculatePercentage(potentialConfirmedCount, reviewedPotentialCount);
 
         duplicate.duplicateWorkSavedCount = duplicateWorkSavedCount;
-        duplicate.resolvedThroughPrimaryCount = resolvedThroughPrimarCount;
+        duplicate.resolvedThroughPrimaryCount = resolvedThroughPrimaryCount;
 
         return duplicate;
     }
