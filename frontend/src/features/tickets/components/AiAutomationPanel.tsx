@@ -14,6 +14,7 @@ import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import RouteOutlinedIcon from "@mui/icons-material/RouteOutlined";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 
 import type { TicketResponseBean } from "../../../api/types";
 import { formatDateTime } from "../../../utils/dateTime";
@@ -210,6 +211,9 @@ export default function AiAutomationPanel({
   hideSectionHeader?: boolean;
 }) {
   const duplicateState = (ticket.duplicateState ?? "NONE").toString().toUpperCase();
+  const kbSuggestionStatus = (ticket.kbSuggestionStatus ?? "").toString().toUpperCase();
+  const kbSuggestionSource = (ticket.kbSuggestionSource ?? "").toString().toUpperCase();
+  const draftKbStatus = (ticket.draftKbStatus ?? "").toString().toUpperCase();
 
   //Pipeline state calculation.
   const classificationFailed = Boolean(ticket.aiFailed);
@@ -219,27 +223,13 @@ export default function AiAutomationPanel({
     Boolean(ticket.vagueReason) ||
     Boolean(ticket.clarificationPrompt);
 
-  const routingStatusLabel =
-    duplicateState === "CONFIRMED"
-      ? "Skipped"
-      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
-      ? "Waiting on review"
-      : ticket.assignedToName || ticket.firstAssignedAt
-      ? "Completed"
-      : "Pending";
+  const duplicatePending =
+    ticket.status === "NEW" ||
+    ticket.status === "AI_PROCESSING" ||
+    ticket.status === "VAGUE";
 
-  const routingStatusTone =
-    duplicateState === "CONFIRMED"
-      ? "default"
-      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
-      ? "warning"
-      : ticket.assignedToName || ticket.firstAssignedAt
-      ? "success"
-      : "info";
-  
-  const duplicatePending = ticket.status == "NEW" || ticket.status === "AI_PROCESSING" || ticket.status === "VAGUE";
-  
-  const duplicateAwaitingReview = ticket.status === "DUPLICATE_REVIEW" || duplicateState === "POTENTIAL";
+  const duplicateAwaitingReview =
+    ticket.status === "DUPLICATE_REVIEW" || duplicateState === "POTENTIAL";
 
   const duplicateStatusLabel =
     duplicateState === "CONFIRMED"
@@ -259,13 +249,115 @@ export default function AiAutomationPanel({
       ? "info"
       : "success";
 
+  const kbSuggestionPending =
+    ticket.status === "NEW" ||
+    ticket.status === "AI_PROCESSING" ||
+    ticket.status === "VAGUE" ||
+    ticket.status === "DUPLICATE_REVIEW";
+
+  const kbSuggestionSkippedForDuplicate = duplicateState === "CONFIRMED";
+
+  const kbSuggestionBlockedWaitingForUser =
+    ticket.status === "KB_SUGGESTED" || kbSuggestionStatus === "SUGGESTED";
+
+  const kbSuggestionAccepted = kbSuggestionStatus === "ACCEPTED";
+  const kbSuggestionRejected = kbSuggestionStatus === "REJECTED";
+
+  const kbSuggestionStatusLabel =
+    kbSuggestionAccepted
+      ? "Accepted"
+      : kbSuggestionRejected
+      ? "Rejected"
+      : kbSuggestionBlockedWaitingForUser
+      ? "Waiting on user"
+      : kbSuggestionSkippedForDuplicate
+      ? "Skipped"
+      : kbSuggestionPending
+      ? "Pending"
+      : ticket.suggestedKbId
+      ? "Suggested"
+      : "No suggestion";
+
+  const kbSuggestionStatusTone =
+    kbSuggestionAccepted
+      ? "success"
+      : kbSuggestionRejected
+      ? "warning"
+      : kbSuggestionBlockedWaitingForUser
+      ? "warning"
+      : kbSuggestionSkippedForDuplicate
+      ? "default"
+      : kbSuggestionPending
+      ? "info"
+      : ticket.suggestedKbId
+      ? "info"
+      : "success";
+
+  const routingBlockedByKbSuggestion = kbSuggestionBlockedWaitingForUser;
+
+  const routingStatusLabel =
+    duplicateState === "CONFIRMED"
+      ? "Skipped"
+      : routingBlockedByKbSuggestion
+      ? "Waiting on user"
+      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
+      ? "Waiting on review"
+      : ticket.assignedToName || ticket.firstAssignedAt
+      ? "Completed"
+      : "Pending";
+
+  const routingStatusTone =
+    duplicateState === "CONFIRMED"
+      ? "default"
+      : routingBlockedByKbSuggestion
+      ? "warning"
+      : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
+      ? "warning"
+      : ticket.assignedToName || ticket.firstAssignedAt
+      ? "success"
+      : "info";
+
+  const kbDraftEligible = ticket.status === "RESOLVED" || ticket.status === "CLOSED";
+  const kbDraftExists = Boolean(ticket.kbDraftExists || ticket.draftKbId);
+
+  const kbDraftStatusLabel =
+    !kbDraftEligible
+      ? "Not eligible yet"
+      : draftKbStatus === "PUBLISHED"
+      ? "Published"
+      : draftKbStatus === "IN_REVIEW"
+      ? "In review"
+      : draftKbStatus === "REJECTED"
+      ? "Rejected"
+      : draftKbStatus === "DRAFT"
+      ? "Draft created"
+      : kbDraftExists
+      ? "Draft created"
+      : "Ready to generate";
+
+  const kbDraftStatusTone =
+    !kbDraftEligible
+      ? "default"
+      : draftKbStatus === "PUBLISHED"
+      ? "success"
+      : draftKbStatus === "IN_REVIEW"
+      ? "info"
+      : draftKbStatus === "REJECTED"
+      ? "warning"
+      : draftKbStatus === "DRAFT"
+      ? "info"
+      : kbDraftExists
+      ? "info"
+      : "default";
+
   return (
     <Stack spacing={0.9}>
       {!hideSectionHeader && (
         <Box>
           <Typography sx={{ fontWeight: 1000, mb: 0.1 }}>AI Automation Journey</Typography>
           <Typography variant="body2" color="text.secondary">
-            Core AI triage stages for classification, vague detection, duplicate detection, routing, and future automation.
+            End-to-end AI-assisted lifecycle across intake, duplicate handling, knowledge support,
+            routing, and post-resolution knowledge capture.
           </Typography>
         </Box>
       )}
@@ -407,6 +499,53 @@ export default function AiAutomationPanel({
 
         <StageCard
           stepNo={4}
+          title="KB Suggestion"
+          icon={<AutoAwesomeOutlinedIcon fontSize="small" />}
+          statusLabel={kbSuggestionStatusLabel}
+          statusTone={kbSuggestionStatusTone}
+        >
+          <InfoLine
+            label="Suggestion outcome"
+            value={
+              kbSuggestionSkippedForDuplicate
+                ? "Skipped because the ticket was confirmed as a duplicate."
+                : kbSuggestionPending
+                ? "KB suggestion has not run yet because earlier pipeline stages are not complete."
+                : kbSuggestionBlockedWaitingForUser
+                ? "Waiting for the user to review the suggested article and respond."
+                : kbSuggestionAccepted
+                ? "The user accepted the suggested article as solving the issue."
+                : kbSuggestionRejected
+                ? "The user rejected the suggested article and the ticket can continue toward further help."
+                : ticket.suggestedKbId
+                ? "A KB article was suggested for potential self-resolution."
+                : "No KB suggestion was made for this ticket."
+            }
+            multiline
+          />
+          <InfoLine
+            label="Suggested article"
+            value={
+              ticket.suggestedKbId
+                ? `${ticket.suggestedKbTitle ?? "KB Article"} (KB #${ticket.suggestedKbId})`
+                : "No article suggested"
+            }
+          />
+          <InfoLine
+            label="Preview"
+            value={ticket.suggestedKbPreview ?? "No KB preview available"}
+            multiline
+          />
+          <InfoLine label="Suggestion status" value={ticket.kbSuggestionStatus ?? "—"} />
+          <InfoLine label="Suggestion source" value={ticket.kbSuggestionSource ?? "—"} />
+          <InfoLine
+            label="Similarity"
+            value={formatSimilarity(ticket.suggestedKbSimilarity ?? null)}
+          />
+        </StageCard>
+
+        <StageCard
+          stepNo={5}
           title="Routing"
           icon={<RouteOutlinedIcon fontSize="small" />}
           statusLabel={routingStatusLabel}
@@ -420,6 +559,8 @@ export default function AiAutomationPanel({
             value={
               duplicateState === "CONFIRMED"
                 ? "Routing not needed because this ticket is linked to a primary ticket."
+                : routingBlockedByKbSuggestion
+                ? "Routing is waiting for the user's response to the suggested KB article."
                 : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
                 ? "Routing is waiting for the duplicate review decision."
                 : ticket.assignedToName || ticket.firstAssignedAt
@@ -431,18 +572,41 @@ export default function AiAutomationPanel({
         </StageCard>
 
         <StageCard
-          stepNo={5}
-          title="Knowledge Assist"
-          icon={<AutoAwesomeOutlinedIcon fontSize="small" />}
-          statusLabel="TO DO"
-          statusTone="default"
-          muted
+          stepNo={6}
+          title="KB Drafting"
+          icon={<ArticleOutlinedIcon fontSize="small" />}
+          statusLabel={kbDraftStatusLabel}
+          statusTone={kbDraftStatusTone}
         >
           <InfoLine
-            label="Planned capabilities"
-            value="KB Suggestion and KB draft generation features"
+            label="Eligibility"
+            value={
+              kbDraftEligible
+                ? "This ticket is eligible for KB drafting because it has reached a terminal resolution state."
+                : "KB drafting becomes available after the assigned agent resolves the ticket."
+            }
             multiline
           />
+          <InfoLine
+            label="Draft article"
+            value={
+              ticket.draftKbId
+                ? `${ticket.draftKbTitle ?? "KB Draft"} (KB #${ticket.draftKbId})`
+                : "No draft linked yet"
+            }
+          />
+          <InfoLine label="Draft status" value={ticket.draftKbStatus ?? "—"} />
+          <InfoLine
+            label="AI generated"
+            value={
+              ticket.kbDraftAiGenerated == null
+                ? "—"
+                : ticket.kbDraftAiGenerated
+                ? "Yes"
+                : "No"
+            }
+          />
+          <InfoLine label="Last draft update" value={formatDateTime(ticket.draftKbUpdatedAt)} />
         </StageCard>
       </Box>
     </Stack>
