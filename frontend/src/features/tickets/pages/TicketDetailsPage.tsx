@@ -473,7 +473,7 @@ export default function TicketDetailsPage() {
     isUser &&
     !!userTicket &&
     !userKbSuggestionPending &&
-    (Boolean(userTicket?.clarificationPrompt) || Boolean((userTicket as any)?.vagueReason));
+    (Boolean(userTicket?.clarificationPrompt) || Boolean(userTicket?.vagueReason));
 
   const canGenerateKbDraft =
     isAgent &&
@@ -573,13 +573,13 @@ export default function TicketDetailsPage() {
 
   const submitKbSuggestionAccept = async () => {
     if (!isUser || !idNum) return;
-    await respondToKbSuggestionMutation.mutateAsync({ action: "ACCEPT" });
+    await respondToKbSuggestionMutation.mutateAsync({ action: "ACCEPTED" });
     openSnackbar("Thanks. The suggested article was marked as helpful.", "success");
   };
 
   const submitKbSuggestionReject = async () => {
     if (!isUser || !idNum) return;
-    await respondToKbSuggestionMutation.mutateAsync({ action: "REJECT" });
+    await respondToKbSuggestionMutation.mutateAsync({ action: "REJECTED" });
     openSnackbar("Thanks. The ticket will continue for further handling.", "info");
   };
 
@@ -587,16 +587,19 @@ export default function TicketDetailsPage() {
     if (!isAgent || !idNum || selectedPublicCommentIds.length === 0) return;
 
     const res = await generateKbDraftMutation.mutateAsync({
-      publicCommentIds: selectedPublicCommentIds,
+      selectedCommentIds: selectedPublicCommentIds,
     });
 
     setKbDraftDialogOpen(false);
     setSelectedPublicCommentIds([]);
 
-    if (res?.draftKbId) {
+    if (res?.kbDraftExists || res?.draftKbId) {
       openSnackbar("KB draft generated successfully.", "success");
     } else {
-      openSnackbar("KB draft generation was requested. It may still be processing.", "info");
+      openSnackbar(
+        "KB draft generation was requested. It may still be processing.",
+        "info"
+      );
       setDraftPollingActive(true);
     }
   };
@@ -605,7 +608,7 @@ export default function TicketDetailsPage() {
     if (!isAgent || !idNum || manualKbArticleId == null) return;
 
     await manualKbSuggestionMutation.mutateAsync({
-      kbArticleId: manualKbArticleId,
+      kbId: manualKbArticleId,
     });
 
     setManualKbArticleId(null);
