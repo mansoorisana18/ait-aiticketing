@@ -12,6 +12,11 @@ import type {
   ConfirmedDuplicateTicketResponseBean,
   PrimaryLinkedTicketResponseBean,
   EligibleAgentResponseBean,
+  KbArticleResponseBean, 
+  UserKbSuggestionDecisionRequestBean, 
+  ManualKbSuggestionRequestBean, 
+  GenerateKbDraftRequestBean, 
+  GenerateKbDraftResponseBean,
 } from "../../api/types";
 import {
   fetchTicketsForAgent,
@@ -29,6 +34,10 @@ import {
   fetchConfirmedDuplicates,
   fetchPrimaryLink,
   fetchEligibleAgents,
+  fetchKbArticleById,
+  respondToKbSuggestion,
+  suggestKbManually,
+  generateKbDraft,
   type CreateTicketRequest,
 } from "./api";
 
@@ -188,5 +197,58 @@ export function useEligibleAgents(ticketId: number | null, enabled = true) {
     queryFn: () => fetchEligibleAgents(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
     staleTime: 10_000,
+  });
+}
+
+export function useKbArticle(kbId: number | null, enabled = true) {
+  return useQuery<KbArticleResponseBean>({
+    queryKey: ["kb", kbId],
+    queryFn: () => fetchKbArticleById(kbId as number),
+    enabled: enabled && typeof kbId === "number",
+    staleTime: 30_000,
+  });
+}
+
+export function useRespondToKbSuggestion(ticketId: number) {
+  const qc = useQueryClient();
+
+  return useMutation<UserTicketResponseBean, unknown, UserKbSuggestionDecisionRequestBean>({
+    mutationFn: (body) => respondToKbSuggestion(ticketId, body),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["ticket", "user", ticketId] });
+      await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "user"] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
+      await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ai-summary"] });
+    },
+  });
+}
+
+export function useManualKbSuggestion(ticketId: number) {
+  const qc = useQueryClient();
+
+  return useMutation<TicketResponseBean, unknown, ManualKbSuggestionRequestBean>({
+    mutationFn: (body) => suggestKbManually(ticketId, body),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
+      await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ai-summary"] });
+    },
+  });
+}
+
+export function useGenerateKbDraft(ticketId: number) {
+  const qc = useQueryClient();
+
+  return useMutation<GenerateKbDraftResponseBean, unknown, GenerateKbDraftRequestBean>({
+    mutationFn: (body) => generateKbDraft(ticketId, body),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["ticket", "internal", ticketId] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "agent"] });
+      await qc.invalidateQueries({ queryKey: ["tickets", "admin", "all"] });
+      await qc.invalidateQueries({ queryKey: ["metrics", "admin", "ai-summary"] });
+    },
   });
 }

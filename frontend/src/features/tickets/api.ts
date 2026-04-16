@@ -1,5 +1,5 @@
 import { axiosClient } from "../../api/axiosClient";
-import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean, ConfirmedDuplicateTicketResponseBean, PrimaryLinkedTicketResponseBean, EligibleAgentResponseBean, } from "../../api/types";
+import type { TicketResponseBean, UserTicketResponseBean, AdminOverrideRequestBean, AdminOverrideResponseBean, TicketCommentRequestBean, TicketCommentResponseBean, UpdateTicketStatusRequestBean, UpdateVagueTicketRequestBean, TicketTextVersionResponseBean, ConfirmedDuplicateTicketResponseBean, PrimaryLinkedTicketResponseBean, EligibleAgentResponseBean, KbArticleResponseBean, UserKbSuggestionDecisionRequestBean, ManualKbSuggestionRequestBean, GenerateKbDraftRequestBean, GenerateKbDraftResponseBean, } from "../../api/types";
 
 export type CreateTicketRequest = { title: string; description: string };
 
@@ -112,6 +112,44 @@ export async function fetchEligibleAgents(
 ): Promise<EligibleAgentResponseBean[]> {
   const res = await axiosClient.get<EligibleAgentResponseBean[]>(
     `/api/tickets/${ticketId}/eligible-agents`
+  );
+  return res.data;
+}
+
+export async function fetchKbArticleById(kbId: number): Promise<KbArticleResponseBean> {
+  const res = await axiosClient.get<KbArticleResponseBean>(`/api/kb/${kbId}`);
+  return res.data;
+}
+
+export async function respondToKbSuggestion(
+  ticketId: number,
+  body: UserKbSuggestionDecisionRequestBean
+): Promise<UserTicketResponseBean> {
+  const res = await axiosClient.patch<UserTicketResponseBean>(
+    `/api/tickets/user/${ticketId}/kb-suggestion-response`,
+    body
+  );
+  return res.data;
+}
+
+export async function suggestKbManually(
+  ticketId: number,
+  body: ManualKbSuggestionRequestBean
+): Promise<TicketResponseBean> {
+  const res = await axiosClient.patch<TicketResponseBean>(
+    `/api/tickets/${ticketId}/agent/manual-kb-suggestion`,
+    body
+  );
+  return res.data;
+}
+
+export async function generateKbDraft(
+  ticketId: number,
+  body: GenerateKbDraftRequestBean
+): Promise<GenerateKbDraftResponseBean> {
+  const res = await axiosClient.post<GenerateKbDraftResponseBean>(
+    `/api/tickets/${ticketId}/agent/generate-kb-draft`,
+    body
   );
   return res.data;
 }
