@@ -563,9 +563,10 @@ public class OutboxAiPersistenceService {
 		outbox.setLastError(truncatedError);
 
 		if (nextRetryCount >= maxRetries) {
+			OffsetDateTime now = OffsetDateTime.now();
 			//3B.1) Permanent Failure i.e. 5 retries done still failed. Mark outbox row as FAILED
 			outbox.setStatus("FAILED");
-			outbox.setProcessedAt(OffsetDateTime.now());
+			outbox.setProcessedAt(now);
 			outbox.setNextRunAt(null);
 			outboxRepo.save(outbox);
 
@@ -575,17 +576,33 @@ public class OutboxAiPersistenceService {
 				ticket.setAiFailed(true);
 				ticket.setAiLastError(truncatedError);
 				ticket.setStatus(TicketStatus.READY);
-				ticket.setUpdatedAt(OffsetDateTime.now());
+				ticket.setUpdatedAt(now);
 				ticketRepo.save(ticket);
-			} else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType) 
-					|| OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)
+			} else if (OutboxEventType.DUPLICATE_CHECK_REQUESTED.name().equals(work.eventType)
 					|| OutboxEventType.KB_DRAFT_REQUESTED.name().equals(work.eventType)) {
-				ticket.setUpdatedAt(OffsetDateTime.now());
+				//Don't mark ticket_ai_fialed for non-triage AI stage failures
+				ticket.setUpdatedAt(now);
 				ticket.setAiLastError(truncatedError);
 				ticketRepo.save(ticket);
-			} else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
+			} else if (OutboxEventType.KB_SUGGESTION_REQUESTED.name().equals(work.eventType)) {
+				//KB suggestion is optional. If it permanently fails, we continue the pipeline with ROUTING
+		        //so the ticket does not get stuck after duplicate stage.
+		        ticket.setStatus(TicketStatus.READY);
+		        ticket.setUpdatedAt(now);
+		        ticket.setAiLastError(truncatedError);
+		        ticketRepo.save(ticket);
+
+		        enqueueRoutingFallback(ticket, work.textVersion, now);
+
+		        PERSISTENCE_LOG.warn(
+		                "OutboxAiPersistenceService :: persistStepFailure() :: KB suggestion permanently failed, routing fallback queued :: oeId={} ticketId={} eventType={} retryCount={} err={}",
+		                outbox.getOeId(), work.aggregateId, outbox.getEventType(), nextRetryCount, truncatedError
+		        );
+			}
+			else if (OutboxEventType.ROUTING_REQUESTED.name().equals(work.eventType)) {
 				//ROUTING failure won't erase TRIAGE success/fail or mark AI failure in tickets table
-				ticket.setUpdatedAt(OffsetDateTime.now());
+				ticket.setUpdatedAt(now);
+				ticket.setAiLastError(truncatedError);
 				ticketRepo.save(ticket);
 			}
 
@@ -618,6 +635,19 @@ public class OutboxAiPersistenceService {
 			PERSISTENCE_LOG.warn("OutboxAiPersistenceService :: exit persistStepFailure() retry scheduled :: oeId={} ticketId={} eventType={} retryCount={} nextRunAt={} err={}",
 					outbox.getOeId(), work.aggregateId, outbox.getEventType(), nextRetryCount, outbox.getNextRunAt(), truncatedError);
 		}
+	}
+	
+	//Added if KB_SUGGESTION step failed
+	private void enqueueRoutingFallback(Ticket ticket, Integer textVersion, OffsetDateTime now) {
+	    OutboxEvent routingEvent = new OutboxEvent();
+	    routingEvent.setEventType(OutboxEventType.ROUTING_REQUESTED.name());
+	    routingEvent.setAggregateType(AggregateType.TICKET.name());
+	    routingEvent.setAggregateId(ticket.getTicketId());
+	    routingEvent.setPayload(toJson(Map.of("textVersion", textVersion == null ? ticket.getCurrentTextVersion() : textVersion)));
+	    routingEvent.setStatus("PENDING");
+	    routingEvent.setRetryCount(0);
+	    routingEvent.setCreatedAt(now);
+	    outboxRepo.save(routingEvent);
 	}
 
 	private AiDecision buildDecision(long ticketId, int textVersion, String type, Object jsonObj, BigDecimal confidence,
