@@ -49,7 +49,7 @@ export type DuplicateState = "NONE" | "POTENTIAL" | "CONFIRMED";
 
 export type KbSuggestionStatus = "SUGGESTED" | "ACCEPTED" | "REJECTED";
 
-export type KbDraftStatus = "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "REJECTED";
+export type KbArticleStatus = "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "REJECTED" | string;
 
 export type AdminOverrideType =
   | "CATEGORY"
@@ -143,7 +143,7 @@ export type TicketResponseBean = {
   //KB draft summary
   draftKbId?: number | null;
   draftKbTitle?: string | null;
-  draftKbStatus?: KbDraftStatus | string | null;
+  draftKbStatus?: KbArticleStatus | string | null;
   kbDraftExists?: boolean | null;
   kbDraftAiGenerated?: boolean | null;
   draftKbUpdatedAt?: string | null;
@@ -261,33 +261,65 @@ export type PrimaryLinkedTicketResponseBean = {
   propagateResolution?: boolean | null;
 };
 
-export type KbArticleResponseBean = {
-  kbId: number;
-  title: string;
-  content: string;
-  status?: string | null;
-  sourceTicketId?: number | null;
-  createdByUserId?: number | null;
-  createdByName?: string | null;
-  updatedAt?: string | null;
-};
-
-export type UserKbSuggestionDecisionRequestBean = {
-  action: "ACCEPT" | "REJECT";
+//KB request beans
+export type KbSuggestionResponseRequestBean = {
+  action: "ACCEPTED" | "REJECTED";
 };
 
 export type ManualKbSuggestionRequestBean = {
-  kbArticleId: number;
+  kbId: number;
 };
 
 export type GenerateKbDraftRequestBean = {
-  publicCommentIds: number[];
+  selectedCommentIds: number[];
 };
 
-export type GenerateKbDraftResponseBean = {
-  accepted: boolean;
-  message?: string | null;
-  draftKbId?: number | null;
+export type CreateKbArticleRequestBean = {
+  title: string;
+  body: string;
+};
+
+export type UpdateKbArticleRequestBean = {
+  title: string;
+  body: string;
+};
+
+export type UpdateKbDraftRequestBean = {
+  title: string;
+  body: string;
+};
+
+export type KbReviewDecisionRequestBean = {
+  action: "APPROVE" | "REJECT";
+};
+
+//KB Response beans 
+export type KbArticleResponseBean = {
+  kbId: number;
+  title: string;
+  body: string;
+  status: KbArticleStatus;
+
+  isAiGenerated?: boolean | null;
+
+  sourceTicketId?: number | null;
+
+  createdByUserId?: number | null;
+  createdByName?: string | null;
+  createdByEmail?: string | null;
+
+  lastModifiedByUserId?: number | null;
+  lastModifiedByName?: string | null;
+  lastModifiedByEmail?: string | null;
+
+  approvedByUserId?: number | null;
+  approvedByName?: string | null;
+  approvedByEmail?: string | null;
+
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  agentSubmittedAt?: string | null;
+  approvedAt?: string | null;
 };
 
 //Ticket summary metrics for admin & agent tickt pages
@@ -343,21 +375,29 @@ export type DuplicateMetricsResponseBean = {
 };
 
 export type KbSuggestionMetricsResponseBean = {
-  kbSuggestionsAttempted: number;
-  kbSuggestionSuccessRate: number | null;
-  averageKbSuggestionTimeSeconds: number | null;
-  kbSuggestionAcceptanceRate: number | null;
-  kbSuggestionRejectionRate: number | null;
-  kbSuggestionsAwaitingUserCount: number;
+  suggestionAttempts: number;
+
+  averageSuggestionConfidence?: number | null;
+  averageSuggestionSimilarity?: number | null;
+  autoSuggestionAcceptanceRate?: number | null;
+  autoSuggestionRejectionRate?: number | null;
+
+  manualSuggestionCount: number;
+  manualSuggestionAcceptanceRate?: number | null;
+  manualSuggestionRejectionRate?: number | null;
 };
 
 export type KbDraftMetricsResponseBean = {
-  kbDraftRequestsAttempted: number;
-  kbDraftRequestSuccessRate: number | null;
-  averageKbDraftGenerationTimeSeconds: number | null;
-  kbDraftPublishedRate: number | null;
-  kbDraftRejectedRate: number | null;
-  kbDraftInReviewCount: number;
+  draftGenerationAttempts: number;
+  draftGenerationSuccessRate: number;
+  averageDraftGenerationConfidence?: number | null;
+
+  submittedForReviewCount: number;
+  draftApprovalRate: number;
+  draftRejectionRate: number;
+  averageReviewTurnaroundHours?: number | null;
+
+  publishedAiDraftCount: number;
 };
 
 export type AiSummaryMetricsResponseBean = {
