@@ -18,6 +18,8 @@ export default function AnalyticsPage() {
   const triage = data.triage;
   const routing = data.routing;
   const duplicate = data.duplicate;
+  const kbSuggestion = data.kbSuggestion;
+  const kbDraft = data.kbDraft;
 
   const triageCards = (
     <Box
@@ -133,6 +135,51 @@ export default function AnalyticsPage() {
     </Box>
   );
 
+  const kbSuggestionCards = (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: {
+          xs: "1fr",
+          md: "repeat(2, minmax(0, 1fr))",
+        },
+        gap: 1,
+      }}
+    >
+      <MetricCard
+        title="KB Suggestions Attempted"
+        value={kbSuggestion.kbSuggestionsAttempted}
+        summary="Number of tickets evaluated for KB article suggestion."
+        interpretation="Higher values indicate the system is actively trying to resolve tickets through self-service guidance."
+        calculation="Count of KB suggestion attempts."
+      />
+
+      <MetricCard
+        title="KB Suggestion Success Rate"
+        value={formatPercent(kbSuggestion.kbSuggestionSuccessRate)}
+        summary="Percentage of KB suggestion attempts completed successfully."
+        interpretation="Higher values indicate the KB suggestion pipeline is running reliably."
+        calculation="Successful KB suggestion attempts divided by total KB suggestion attempts."
+      />
+
+      <MetricCard
+        title="Average KB Suggestion Time"
+        value={formatSeconds(kbSuggestion.averageKbSuggestionTimeSeconds)}
+        summary="Average time taken to complete KB suggestion processing."
+        interpretation="Lower values indicate faster self-service suggestion turnaround."
+        calculation="Average elapsed time for KB suggestion generation."
+      />
+
+      <MetricCard
+        title="Awaiting User Response Count"
+        value={kbSuggestion.kbSuggestionsAwaitingUserCount}
+        summary="Tickets currently waiting for user response to a suggested article."
+        interpretation="Higher values indicate more tickets are paused in the KB self-service decision stage."
+        calculation="Count of tickets in KB_SUGGESTED / waiting-on-user state."
+      />
+    </Box>
+  );
+
   const routingCards = (
     <Box
       sx={{
@@ -166,6 +213,51 @@ export default function AnalyticsPage() {
         summary="Measures how often an automatically assigned ticket was later manually reassigned."
         interpretation="A lower value suggests the routing logic is selecting the right assignee more consistently."
         calculation="Manual assignment changes divided by auto-assigned tickets."
+      />
+    </Box>
+  );
+
+  const kbDraftCards = (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: {
+          xs: "1fr",
+          md: "repeat(2, minmax(0, 1fr))",
+        },
+        gap: 1,
+      }}
+    >
+      <MetricCard
+        title="KB Draft Requests Attempted"
+        value={kbDraft.kbDraftRequestsAttempted}
+        summary="Number of agent-initiated KB draft generation requests."
+        interpretation="Higher values indicate more resolved tickets are being converted into reusable knowledge."
+        calculation="Count of KB draft generation requests."
+      />
+
+      <MetricCard
+        title="KB Draft Request Success Rate"
+        value={formatPercent(kbDraft.kbDraftRequestSuccessRate)}
+        summary="Percentage of KB draft generation requests accepted successfully."
+        interpretation="Higher values indicate the drafting pipeline is functioning reliably."
+        calculation="Successful KB draft requests divided by total KB draft requests."
+      />
+
+      <MetricCard
+        title="Average Draft Generation Time"
+        value={formatSeconds(kbDraft.averageKbDraftGenerationTimeSeconds)}
+        summary="Average time taken to generate KB drafts."
+        interpretation="Lower values indicate faster conversion from ticket resolution to draft knowledge."
+        calculation="Average elapsed time for KB draft generation."
+      />
+
+      <MetricCard
+        title="Drafts In Review"
+        value={kbDraft.kbDraftInReviewCount}
+        summary="Number of KB drafts currently awaiting review."
+        interpretation="Higher values indicate more generated knowledge is pending editorial or admin review."
+        calculation="Count of KB drafts currently in review."
       />
     </Box>
   );
@@ -360,6 +452,54 @@ export default function AnalyticsPage() {
       />
 
       <MetricsSection
+        title="KB SUGGESTION"
+        processSteps={[
+          "Similarity Search",
+          "User-facing Suggestion",
+          "User Decision",
+        ]}
+        description="After successful duplicate check, the KB SUGGESTION phase identifies a potentially relevant knowledge article, presents it to the user, and waits for the user to accept the suggestion or request further help."
+        highlight={
+          <MetricsHighlightCard
+            title="KB Suggestion Performance"
+            primaryLabel="KB Suggestion Acceptance Rate"
+            primaryValue={formatPercent(kbSuggestion.kbSuggestionAcceptanceRate)}
+            primaryInfo={{
+              title: "KB Suggestion Acceptance Rate",
+              summary: "Percentage of KB suggestions accepted by users.",
+              interpretation:
+                "A higher value means suggested knowledge articles are resolving user issues more effectively.",
+              calculation:
+                "Accepted KB suggestions divided by user-reviewed KB suggestions.",
+            }}
+            secondaryLabel="KB Suggestion Rejection Rate"
+            secondaryValue={formatPercent(kbSuggestion.kbSuggestionRejectionRate)}
+            secondaryInfo={{
+              title: "KB Suggestion Rejection Rate",
+              summary: "Percentage of KB suggestions rejected by users.",
+              interpretation:
+                "A higher value suggests the suggested articles are less aligned with the actual issue or user need.",
+              calculation:
+                "Rejected KB suggestions divided by user-reviewed KB suggestions.",
+            }}
+            tertiaryLabel="Awaiting User Response"
+            tertiaryValue={kbSuggestion.kbSuggestionsAwaitingUserCount}
+            tertiaryInfo={{
+              title: "Awaiting User Response",
+              summary: "Tickets currently paused for user review of a KB suggestion.",
+              interpretation:
+                "Higher values indicate more tickets are waiting on user decision before routing can continue.",
+              calculation:
+                "Count of tickets currently awaiting user response to suggested KB articles.",
+            }}
+            progressValue={kbSuggestion.kbSuggestionAcceptanceRate ?? null}
+            progressLabel="User acceptance of KB suggestions"
+          />
+        }
+        cards={kbSuggestionCards}
+      />
+
+      <MetricsSection
         title="ROUTING"
         processSteps={[
           "Uses Category as Department",
@@ -403,6 +543,54 @@ export default function AnalyticsPage() {
           />
         }
         cards={routingCards}
+      />
+
+      <MetricsSection
+        title="KB DRAFT"
+        processSteps={[
+          "Public Comment Selection",
+          "Draft Generation",
+          "Review / Publish",
+        ]}
+        description="After ticket resolution, the KB DRAFT phase allows agents to convert public ticket resolution details into reusable knowledge base draft articles for later review and publication."
+        highlight={
+          <MetricsHighlightCard
+            title="KB Drafting Performance"
+            primaryLabel="KB Draft Published Rate"
+            primaryValue={formatPercent(kbDraft.kbDraftPublishedRate)}
+            primaryInfo={{
+              title: "KB Draft Published Rate",
+              summary: "Percentage of generated KB drafts that reach published status.",
+              interpretation:
+                "A higher value means generated drafts are useful enough to become published knowledge assets.",
+              calculation:
+                "Published KB drafts divided by total KB drafts generated.",
+            }}
+            secondaryLabel="KB Draft Rejected Rate"
+            secondaryValue={formatPercent(kbDraft.kbDraftRejectedRate)}
+            secondaryInfo={{
+              title: "KB Draft Rejected Rate",
+              summary: "Percentage of generated KB drafts that are rejected.",
+              interpretation:
+                "A higher value suggests draft quality, structure, or relevance issues before publication.",
+              calculation:
+                "Rejected KB drafts divided by total KB drafts generated.",
+            }}
+            tertiaryLabel="Drafts In Review"
+            tertiaryValue={kbDraft.kbDraftInReviewCount}
+            tertiaryInfo={{
+              title: "Drafts In Review",
+              summary: "KB drafts currently waiting for review.",
+              interpretation:
+                "Higher values indicate more knowledge content is in the editorial pipeline.",
+              calculation:
+                "Count of drafts currently in review status.",
+            }}
+            progressValue={kbDraft.kbDraftPublishedRate ?? null}
+            progressLabel="Publishing success of generated drafts"
+          />
+        }
+        cards={kbDraftCards}
       />
     </Stack>
   );
