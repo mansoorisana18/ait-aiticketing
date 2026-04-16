@@ -71,8 +71,18 @@ export default function TicketTable({ tickets, role }: Props) {
                 Boolean(t.vagueReason) ||
                 Boolean(t.clarificationPrompt));
 
-              const isInternalVague = internal && t.status === "VAGUE";
-              const isInternalKbSuggested = internal && t.status === "KB_SUGGESTED";
+            const isInternalVague = internal && t.status === "VAGUE";
+            // const isInternalKbSuggested = internal && t.status === "KB_SUGGESTED";
+
+            const isUserKbSuggested =
+              !internal &&
+              t.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
+              Boolean(t.suggestedKbId);
+
+            const isUserVague =
+              !internal &&
+              !isUserKbSuggested &&
+              (Boolean(t.clarificationPrompt) || Boolean(t.vagueReason));
             
               return (
               <TableRow
@@ -104,7 +114,7 @@ export default function TicketTable({ tickets, role }: Props) {
                     {t.description}
                   </Typography>
 
-                  {!internal && isInternalVague && (
+                  {isUserVague && (
                     <Box
                       sx={{
                         mt: 0.75,
@@ -122,7 +132,7 @@ export default function TicketTable({ tickets, role }: Props) {
                     </Box>
                   )}
 
-                  {!internal && isInternalKbSuggested && (
+                  {isUserKbSuggested && (
                     <Box
                       sx={{
                         mt: 0.75,
