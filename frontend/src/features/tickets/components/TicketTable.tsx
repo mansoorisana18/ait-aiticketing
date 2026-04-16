@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Box,
   Chip,
@@ -72,7 +71,10 @@ export default function TicketTable({ tickets, role }: Props) {
                 Boolean(t.vagueReason) ||
                 Boolean(t.clarificationPrompt));
 
-            return (
+              const isInternalVague = internal && t.status === "VAGUE";
+              const isInternalKbSuggested = internal && t.status === "KB_SUGGESTED";
+            
+              return (
               <TableRow
                 key={t.ticketId}
                 hover
@@ -102,7 +104,7 @@ export default function TicketTable({ tickets, role }: Props) {
                     {t.description}
                   </Typography>
 
-                  {!internal && t.userTicketStatus?.toUpperCase() === "WAITING FOR YOUR INPUT" && (
+                  {!internal && isInternalVague && (
                     <Box
                       sx={{
                         mt: 0.75,
@@ -120,6 +122,24 @@ export default function TicketTable({ tickets, role }: Props) {
                     </Box>
                   )}
 
+                  {!internal && isInternalKbSuggested && (
+                    <Box
+                      sx={{
+                        mt: 0.75,
+                        px: 1,
+                        py: 0.5,
+                        borderRadius: 1.5,
+                        bgcolor: "rgba(2, 132, 199, 0.08)",
+                        border: "1px solid rgba(2, 132, 199, 0.18)",
+                        display: "inline-block",
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: "#0369A1" }}>
+                        Suggested solution available — user action required
+                      </Typography>
+                    </Box>
+                  )}
+
                   {hasClarificationInfo && (
                     <Box
                       sx={{
@@ -133,7 +153,7 @@ export default function TicketTable({ tickets, role }: Props) {
                       }}
                     >
                       <Typography variant="caption" sx={{ fontWeight: 700, color: "#0369A1" }}>
-                        {t.userTicketStatus?.toUpperCase() === "WAITING FOR YOUR INPUT"
+                        {isInternalVague
                           ? "Awaiting user clarification"
                           : t.vagueCount && t.vagueCount > 0
                           ? `Clarification activity recorded (${t.vagueCount})`
