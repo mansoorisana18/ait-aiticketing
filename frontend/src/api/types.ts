@@ -37,6 +37,7 @@ export type TicketStatus =
   | "NEW"
   | "AI_PROCESSING"
   | "VAGUE"
+  | "KB_SUGGESTED"
   | "READY"
   | "DUPLICATE_REVIEW"
   | "IN_PROGRESS"
@@ -45,6 +46,10 @@ export type TicketStatus =
   | "CLOSED";
 
 export type DuplicateState = "NONE" | "POTENTIAL" | "CONFIRMED";
+
+export type KbSuggestionStatus = "SUGGESTED" | "ACCEPTED" | "REJECTED";
+
+export type KbDraftStatus = "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "REJECTED";
 
 export type AdminOverrideType =
   | "CATEGORY"
@@ -86,6 +91,12 @@ export type UserTicketResponseBean = {
   //for vague indication on user side
   vagueReason?: string | null;
   clarificationPrompt?: string | null;
+
+  //KB suggestion
+  suggestedKbId?: number | null;
+  suggestedKbTitle?: string | null;
+  suggestedKbPreview?: string | null;
+  kbSuggestionStatus?: KbSuggestionStatus | string | null;
 };
 
 //ADMIN/AGENT view ticket bean - includes all fields, including those relevant to the agent/admin
@@ -120,6 +131,22 @@ export type TicketResponseBean = {
   firstAssignedAt?: string | null; //metrics field for dashboard
   vagueReason?: string | null;
   clarificationPrompt?: string | null;
+
+  //KB suggestion preview/internal details
+  suggestedKbId?: number | null;
+  suggestedKbTitle?: string | null;
+  suggestedKbPreview?: string | null;
+  kbSuggestionStatus?: KbSuggestionStatus | string | null;
+  kbSuggestionSource?: string | null;
+  suggestedKbSimilarity?: number | null;
+
+  //KB draft summary
+  draftKbId?: number | null;
+  draftKbTitle?: string | null;
+  draftKbStatus?: KbDraftStatus | string | null;
+  kbDraftExists?: boolean | null;
+  kbDraftAiGenerated?: boolean | null;
+  draftKbUpdatedAt?: string | null;
 
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -234,6 +261,35 @@ export type PrimaryLinkedTicketResponseBean = {
   propagateResolution?: boolean | null;
 };
 
+export type KbArticleResponseBean = {
+  kbId: number;
+  title: string;
+  content: string;
+  status?: string | null;
+  sourceTicketId?: number | null;
+  createdByUserId?: number | null;
+  createdByName?: string | null;
+  updatedAt?: string | null;
+};
+
+export type UserKbSuggestionDecisionRequestBean = {
+  action: "ACCEPT" | "REJECT";
+};
+
+export type ManualKbSuggestionRequestBean = {
+  kbArticleId: number;
+};
+
+export type GenerateKbDraftRequestBean = {
+  publicCommentIds: number[];
+};
+
+export type GenerateKbDraftResponseBean = {
+  accepted: boolean;
+  message?: string | null;
+  draftKbId?: number | null;
+};
+
 //Ticket summary metrics for admin & agent tickt pages
 export type TicketSummaryMetricsResponseBean = {
   totalTickets: number;
@@ -286,8 +342,28 @@ export type DuplicateMetricsResponseBean = {
   resolvedThroughPrimaryCount: number;
 };
 
+export type KbSuggestionMetricsResponseBean = {
+  kbSuggestionsAttempted: number;
+  kbSuggestionSuccessRate: number | null;
+  averageKbSuggestionTimeSeconds: number | null;
+  kbSuggestionAcceptanceRate: number | null;
+  kbSuggestionRejectionRate: number | null;
+  kbSuggestionsAwaitingUserCount: number;
+};
+
+export type KbDraftMetricsResponseBean = {
+  kbDraftRequestsAttempted: number;
+  kbDraftRequestSuccessRate: number | null;
+  averageKbDraftGenerationTimeSeconds: number | null;
+  kbDraftPublishedRate: number | null;
+  kbDraftRejectedRate: number | null;
+  kbDraftInReviewCount: number;
+};
+
 export type AiSummaryMetricsResponseBean = {
   triage: TriageMetricsResponseBean;
   routing: RoutingMetricsResponseBean;
   duplicate: DuplicateMetricsResponseBean;
+  kbSuggestion: KbSuggestionMetricsResponseBean;
+  kbDraft: KbDraftMetricsResponseBean;
 };
