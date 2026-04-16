@@ -65,6 +65,9 @@ public class TicketResponseBean {
     public String kbSuggestionStatus;
     public String kbSuggestionSource;
     public Double suggestedKbSimilarity;
+    //KB suggestion failure info
+    public Boolean kbSuggestionFailed;
+    public String kbSuggestionError;
     
     //KB draft summary
     public Long draftKbId;

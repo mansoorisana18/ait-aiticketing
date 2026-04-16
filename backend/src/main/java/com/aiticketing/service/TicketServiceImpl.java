@@ -1136,6 +1136,7 @@ public class TicketServiceImpl implements TicketService {
 		populateDuplicateDetails(t, r);
 		
 		populateKbSuggestionDetails(t, r);
+		populateKbSuggestionFailure(t, r);
 		
 		populateKbDraftSummary(t, r);
 		
@@ -1438,6 +1439,34 @@ public class TicketServiceImpl implements TicketService {
 	    if (suggestion.getSimilarity() != null) {
 	        resp.suggestedKbSimilarity = suggestion.getSimilarity().doubleValue();
 	    }
+	}
+	
+	private void populateKbSuggestionFailure(Ticket ticket, TicketResponseBean resp) {
+
+	    OutboxEvent failedKbEvent = outboxEventRepo
+	            .findTopByAggregateIdAndEventTypeAndStatusOrderByOeIdDesc(
+	                    ticket.getTicketId(),
+	                    OutboxEventType.KB_SUGGESTION_REQUESTED.name(),
+	                    "FAILED"
+	            )
+	            .orElse(null);
+
+	    if (failedKbEvent == null) {
+	        resp.kbSuggestionFailed = false;
+	        resp.kbSuggestionError = null;
+	        return;
+	    }
+
+	    resp.kbSuggestionFailed = true;
+
+	    //event-level error if available, or to ticket error
+	    String error = failedKbEvent.getLastError();
+
+	    if (error == null || error.isBlank()) {
+	        error = ticket.getAiLastError();
+	    }
+
+	    resp.kbSuggestionError = error;
 	}
 	
 	private String buildPreview(String body) {
