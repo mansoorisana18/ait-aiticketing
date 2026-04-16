@@ -59,7 +59,13 @@ export function statusChipSx(status?: string) {
     case "VAGUE":
       return {
         bgcolor: "#F45D01",
-        color: "#FFFFFF",        
+        color: "#FFFFFF",
+      };
+
+    case "KB_SUGGESTED":
+      return {
+        bgcolor: "#219EBC",
+        color: "#FFFFFF",
       };
 
     case "IN_PROGRESS":
