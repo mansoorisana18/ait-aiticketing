@@ -212,7 +212,7 @@ export default function AiAutomationPanel({
 }) {
   const duplicateState = (ticket.duplicateState ?? "NONE").toString().toUpperCase();
   const kbSuggestionStatus = (ticket.kbSuggestionStatus ?? "").toString().toUpperCase();
-  const kbSuggestionSource = (ticket.kbSuggestionSource ?? "").toString().toUpperCase();
+  // const kbSuggestionSource = (ticket.kbSuggestionSource ?? "").toString().toUpperCase();
   const draftKbStatus = (ticket.draftKbStatus ?? "").toString().toUpperCase();
 
   //Pipeline state calculation.
