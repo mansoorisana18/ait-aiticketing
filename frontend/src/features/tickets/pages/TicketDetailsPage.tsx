@@ -305,6 +305,7 @@ export default function TicketDetailsPage() {
   const [kbArticleOpen, setKbArticleOpen] = React.useState(false);
   const [kbDraftDialogOpen, setKbDraftDialogOpen] = React.useState(false);
   const [selectedPublicCommentIds, setSelectedPublicCommentIds] = React.useState<number[]>([]);
+  const [manualKbArticleId, setManualKbArticleId] = React.useState<number | null>(null);
 
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState("");
@@ -421,9 +422,8 @@ export default function TicketDetailsPage() {
 
     const interval = window.setInterval(async () => {
       attempts += 1;
-      await internalQuery.refetch();
-
-      const refreshed = internalQuery.data;
+      const refreshedResult = await internalQuery.refetch();
+      const refreshed = refreshedResult.data;
       const hasDraft = Boolean(refreshed?.kbDraftExists || refreshed?.draftKbId);
 
       if (hasDraft) {
@@ -433,10 +433,7 @@ export default function TicketDetailsPage() {
       } else if (attempts >= maxAttempts) {
         window.clearInterval(interval);
         setDraftPollingActive(false);
-        openSnackbar(
-          "KB draft generation is still processing. Please refresh later.",
-          "info"
-        );
+        openSnackbar("KB draft generation is still processing. Please refresh later.", "info");
       }
     }, 3000);
 
@@ -476,12 +473,7 @@ export default function TicketDetailsPage() {
     isUser &&
     !!userTicket &&
     !userKbSuggestionPending &&
-    (Boolean(userTicket?.clarificationPrompt) || Boolean(userTicket?.vagueReason));
-
-  const internalKbSuggestionPending =
-    !isUser &&
-    internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
-    Boolean(internalTicketData?.suggestedKbId);
+    (Boolean(userTicket?.clarificationPrompt) || Boolean((userTicket as any)?.vagueReason));
 
   const canGenerateKbDraft =
     isAgent &&
@@ -491,6 +483,15 @@ export default function TicketDetailsPage() {
 
   const canOpenExistingKbDraft =
     !isUser && Boolean(internalTicketData?.kbDraftExists && internalTicketData?.draftKbId);
+
+  const canManualSuggestKb =
+    isAgent &&
+    canAgentUpdate &&
+    internalTicketData?.status !== "VAGUE" &&
+    internalTicketData?.status !== "DUPLICATE_REVIEW" &&
+    internalTicketData?.status !== "DUPLICATE" &&
+    internalTicketData?.status !== "KB_SUGGESTED" &&
+    duplicateState !== "CONFIRMED";
 
   const openSnackbar = (
     message: string,
@@ -595,12 +596,20 @@ export default function TicketDetailsPage() {
     if (res?.draftKbId) {
       openSnackbar("KB draft generated successfully.", "success");
     } else {
-      openSnackbar(
-        "KB draft generation was requested. It may still be processing.",
-        "info"
-      );
+      openSnackbar("KB draft generation was requested. It may still be processing.", "info");
       setDraftPollingActive(true);
     }
+  };
+
+  const submitManualKbSuggestion = async () => {
+    if (!isAgent || !idNum || manualKbArticleId == null) return;
+
+    await manualKbSuggestionMutation.mutateAsync({
+      kbArticleId: manualKbArticleId,
+    });
+
+    setManualKbArticleId(null);
+    openSnackbar("KB article was suggested to the user.", "success");
   };
 
   const renderOverrideNewValueField = () => {
@@ -1117,92 +1126,149 @@ export default function TicketDetailsPage() {
                     </Stack>
                   </Paper>
                 ) : (
-                  <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
-                    <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>Agent Action</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
-                      Update workflow status for tickets assigned to you.
-                    </Typography>
+                  <>
+                    <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
+                      <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>Agent Action</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
+                        Update workflow status for tickets assigned to you.
+                      </Typography>
 
-                    {!canAgentUpdate ? (
-                      <Alert severity="info">
-                        You can update status only for tickets assigned to you.
-                      </Alert>
-                    ) : (
-                      <Stack spacing={0.8}>
-                        <TextField
-                          select
-                          label="New Status"
-                          value={agentStatus}
-                          onChange={(e) =>
-                            setAgentStatus(
-                              e.target.value as UpdateTicketStatusRequestBean["status"]
-                            )
-                          }
-                          size="small"
-                        >
-                          {AGENT_STATUS_OPTIONS.map((s) => (
-                            <MenuItem key={s} value={s}>
-                              {s}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-
-                        <Button
-                          variant="contained"
-                          onClick={submitAgentStatus}
-                          disabled={agentUpdate.isPending}
-                        >
-                          {agentUpdate.isPending ? "Updating..." : "Update Status"}
-                        </Button>
-
-                        {agentUpdate.isError && (
-                          <Alert severity="error">Failed to update status.</Alert>
-                        )}
-                        {agentUpdate.isSuccess && (
-                          <Alert severity="success">Status updated.</Alert>
-                        )}
-                      </Stack>
-                    )}
-                  </Paper>                  
-                )}
-                {isAgent && (canGenerateKbDraft || canOpenExistingKbDraft) && (
-                  <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
-                    <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>KB Drafting</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
-                      Generate or continue a knowledge base draft from the resolved ticket and its
-                      public resolution comments.
-                    </Typography>
-
-                    <Stack spacing={0.8}>
-                      {internalTicketData?.kbDraftExists ? (
-                        <>
-                          <CompactInfoRow
-                            label="Draft"
-                            value={
-                              internalTicketData?.draftKbId
-                                ? `${internalTicketData?.draftKbTitle ?? "KB Draft"} (KB #${internalTicketData.draftKbId})`
-                                : "Draft exists"
-                            }
-                          />
-                          <CompactInfoRow
-                            label="Status"
-                            value={internalTicketData?.draftKbStatus ?? "—"}
-                          />
-                          <Button variant="outlined" disabled>
-                            View / Edit Draft
-                          </Button>
-                        </>
+                      {!canAgentUpdate ? (
+                        <Alert severity="info">
+                          You can update status only for tickets assigned to you.
+                        </Alert>
                       ) : (
-                        <Button
-                          variant="contained"
-                          onClick={() => setKbDraftDialogOpen(true)}
-                          disabled={!canGenerateKbDraft}
-                        >
-                          Generate KB Draft
-                        </Button>
+                        <Stack spacing={0.8}>
+                          <TextField
+                            select
+                            label="New Status"
+                            value={agentStatus}
+                            onChange={(e) =>
+                              setAgentStatus(
+                                e.target.value as UpdateTicketStatusRequestBean["status"]
+                              )
+                            }
+                            size="small"
+                          >
+                            {AGENT_STATUS_OPTIONS.map((s) => (
+                              <MenuItem key={s} value={s}>
+                                {s}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+
+                          <Button
+                            variant="contained"
+                            onClick={submitAgentStatus}
+                            disabled={agentUpdate.isPending}
+                          >
+                            {agentUpdate.isPending ? "Updating..." : "Update Status"}
+                          </Button>
+
+                          {agentUpdate.isError && (
+                            <Alert severity="error">Failed to update status.</Alert>
+                          )}
+                          {agentUpdate.isSuccess && (
+                            <Alert severity="success">Status updated.</Alert>
+                          )}
+                        </Stack>
                       )}
-                    </Stack>
-                  </Paper>
+                    </Paper>
+
+                    {canAgentUpdate && (
+                      <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
+                        <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>
+                          Manual KB Suggestion
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
+                          Suggest an existing KB article directly to the user when you know a
+                          relevant article that can help resolve the issue.
+                        </Typography>
+
+                        {!canManualSuggestKb ? (
+                          <Alert severity="info">
+                            Manual KB suggestion is not available for the current ticket state.
+                          </Alert>
+                        ) : (
+                          <Stack spacing={0.8}>
+                            <TextField
+                              label="KB Article ID"
+                              value={manualKbArticleId ?? ""}
+                              onChange={(e) =>
+                                setManualKbArticleId(
+                                  e.target.value === "" ? null : Number(e.target.value)
+                                )
+                              }
+                              size="small"
+                              inputProps={{
+                                inputMode: "numeric",
+                                pattern: "[0-9]*",
+                              }}
+                              helperText="Enter the existing KB article id to suggest to the user."
+                            />
+
+                            <Button
+                              variant="outlined"
+                              onClick={submitManualKbSuggestion}
+                              disabled={
+                                manualKbSuggestionMutation.isPending || manualKbArticleId == null
+                              }
+                            >
+                              {manualKbSuggestionMutation.isPending
+                                ? "Suggesting..."
+                                : "Suggest KB Article"}
+                            </Button>
+
+                            {manualKbSuggestionMutation.isError && (
+                              <Alert severity="error">
+                                Failed to suggest KB article to the user.
+                              </Alert>
+                            )}
+                          </Stack>
+                        )}
+                      </Paper>
+                    )}
+
+                    {isAgent && (canGenerateKbDraft || canOpenExistingKbDraft) && (
+                      <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
+                        <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>KB Drafting</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
+                          Generate or continue a knowledge base draft from the resolved ticket and
+                          its public resolution comments.
+                        </Typography>
+
+                        <Stack spacing={0.8}>
+                          {internalTicketData?.kbDraftExists ? (
+                            <>
+                              <CompactInfoRow
+                                label="Draft"
+                                value={
+                                  internalTicketData?.draftKbId
+                                    ? `${internalTicketData?.draftKbTitle ?? "KB Draft"} (KB #${internalTicketData.draftKbId})`
+                                    : "Draft exists"
+                                }
+                              />
+                              <CompactInfoRow
+                                label="Status"
+                                value={internalTicketData?.draftKbStatus ?? "—"}
+                              />
+                              <Button variant="outlined" disabled>
+                                View / Edit Draft
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="contained"
+                              onClick={() => setKbDraftDialogOpen(true)}
+                              disabled={!canGenerateKbDraft}
+                            >
+                              Generate KB Draft
+                            </Button>
+                          )}
+                        </Stack>
+                      </Paper>
+                    )}
+                  </>
                 )}
               </Stack>
             </Box>
@@ -1250,6 +1316,17 @@ export default function TicketDetailsPage() {
           </>
         )}
       </Stack>
+
+      <KbArticleDialog
+        kbId={
+          isUser
+            ? userTicket?.suggestedKbId ?? null
+            : internalTicketData?.suggestedKbId ?? null
+        }
+        open={kbArticleOpen}
+        onClose={() => setKbArticleOpen(false)}
+        titleOverride="Suggested Knowledge Base Article"
+      />
 
       {!isUser && (
         <>
@@ -1397,31 +1474,21 @@ export default function TicketDetailsPage() {
                 </Stack>
               )}
             </DialogContent>
-          </Dialog>         
+          </Dialog>
+
+          <GenerateKbDraftDialog
+            open={kbDraftDialogOpen}
+            onClose={() => setKbDraftDialogOpen(false)}
+            comments={commentsQuery.data ?? []}
+            selectedIds={selectedPublicCommentIds}
+            onSelectedIdsChange={setSelectedPublicCommentIds}
+            onGenerate={submitGenerateKbDraft}
+            isSubmitting={generateKbDraftMutation.isPending}
+            isError={generateKbDraftMutation.isError}
+          />
         </>
       )}
-      <KbArticleDialog
-        kbId={
-          isUser
-            ? userTicket?.suggestedKbId ?? null
-            : internalTicketData?.suggestedKbId ?? null
-        }
-        open={kbArticleOpen}
-        onClose={() => setKbArticleOpen(false)}
-        titleOverride="Suggested Knowledge Base Article"
-      />
-      {!isUser && (
-        <GenerateKbDraftDialog
-          open={kbDraftDialogOpen}
-          onClose={() => setKbDraftDialogOpen(false)}
-          comments={commentsQuery.data ?? []}
-          selectedIds={selectedPublicCommentIds}
-          onSelectedIdsChange={setSelectedPublicCommentIds}
-          onGenerate={submitGenerateKbDraft}
-          isSubmitting={generateKbDraftMutation.isPending}
-          isError={generateKbDraftMutation.isError}
-        />
-      )}
+
       <GlobalSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
