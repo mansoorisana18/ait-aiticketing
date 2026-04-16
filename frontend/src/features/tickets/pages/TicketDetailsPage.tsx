@@ -36,6 +36,10 @@ import TicketDetailsComments from "../components/TicketDetailsComments";
 import TicketTextHistoryPanel from "../components/TicketTextHistoryPanel";
 import VagueClarificationPanel from "../components/VagueClarificationPanel";
 import { formatDateTime } from "../../../utils/dateTime";
+import KbSuggestionPanel from "../components/KbSuggestionPanel";
+import KbArticleDialog from "../components/KbArticleDialog";
+import GenerateKbDraftDialog from "../components/GenerateKbDraftDialog";
+import GlobalSnackbar from "../../../components/GlobalSnackbar";
 
 import type {
   AdminOverrideRequestBean,
@@ -57,6 +61,10 @@ import {
   useTicketDetailsInternal,
   useTicketDetailsUser,
   useTicketTextVersionHistory,
+  useGenerateKbDraft,
+  useManualKbSuggestion,
+  useRespondToKbSuggestion,
+  useTicketComments, 
 } from "../hooks";
 
 const AGENT_STATUS_OPTIONS: UpdateTicketStatusRequestBean["status"][] = [
@@ -285,6 +293,27 @@ export default function TicketDetailsPage() {
   const [primaryLinkOpen, setPrimaryLinkOpen] = React.useState(false);
   const [confirmedDuplicatesOpen, setConfirmedDuplicatesOpen] = React.useState(false);
 
+  const respondToKbSuggestionMutation = useRespondToKbSuggestion(idNum ?? -1);
+  const generateKbDraftMutation = useGenerateKbDraft(idNum ?? -1);
+  const manualKbSuggestionMutation = useManualKbSuggestion(idNum ?? -1);
+
+  const commentsQuery = useTicketComments(
+    idNum,
+    Boolean(idNum && auth.token && !isUser)
+  );
+
+  const [kbArticleOpen, setKbArticleOpen] = React.useState(false);
+  const [kbDraftDialogOpen, setKbDraftDialogOpen] = React.useState(false);
+  const [selectedPublicCommentIds, setSelectedPublicCommentIds] = React.useState<number[]>([]);
+
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = React.useState<
+    "success" | "error" | "warning" | "info"
+  >("info");
+
+  const [draftPollingActive, setDraftPollingActive] = React.useState(false);
+
   /** Ref used so the Band 2 "View full journey" button expands and scrolls to Band 3. */
   const aiJourneyRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -384,6 +413,36 @@ export default function TicketDetailsPage() {
     referenceTicketId,
   ]);
 
+  React.useEffect(() => {
+    if (!draftPollingActive || !idNum || !auth.token || isUser) return;
+
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    const interval = window.setInterval(async () => {
+      attempts += 1;
+      await internalQuery.refetch();
+
+      const refreshed = internalQuery.data;
+      const hasDraft = Boolean(refreshed?.kbDraftExists || refreshed?.draftKbId);
+
+      if (hasDraft) {
+        window.clearInterval(interval);
+        setDraftPollingActive(false);
+        openSnackbar("KB draft is now available.", "success");
+      } else if (attempts >= maxAttempts) {
+        window.clearInterval(interval);
+        setDraftPollingActive(false);
+        openSnackbar(
+          "KB draft generation is still processing. Please refresh later.",
+          "info"
+        );
+      }
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [draftPollingActive, idNum, auth.token, isUser, internalQuery]);
+
   if (isLoading) return <LoadingSkeleton variant="detail" />;
   if (!idNum) return <Typography>Invalid ticket id.</Typography>;
 
@@ -408,11 +467,39 @@ export default function TicketDetailsPage() {
     internalTicketData!.assignedToUserId != null &&
     internalTicketData!.assignedToUserId === auth.userId;
 
+  const userKbSuggestionPending =
+  isUser &&
+  userTicket?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
+  Boolean(userTicket?.suggestedKbId);
+
   const showClarification =
     isUser &&
     !!userTicket &&
-    (userTicket.userTicketStatus?.toUpperCase() === "WAITING FOR YOUR INPUT" ||
-      Boolean(userTicket.clarificationPrompt));
+    !userKbSuggestionPending &&
+    (Boolean(userTicket?.clarificationPrompt) || Boolean(userTicket?.vagueReason));
+
+  const internalKbSuggestionPending =
+    !isUser &&
+    internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
+    Boolean(internalTicketData?.suggestedKbId);
+
+  const canGenerateKbDraft =
+    isAgent &&
+    canAgentUpdate &&
+    (internalTicketData?.status === "RESOLVED" || internalTicketData?.status === "CLOSED") &&
+    !internalTicketData?.kbDraftExists;
+
+  const canOpenExistingKbDraft =
+    !isUser && Boolean(internalTicketData?.kbDraftExists && internalTicketData?.draftKbId);
+
+  const openSnackbar = (
+    message: string,
+    severity: "success" | "error" | "warning" | "info" = "info"
+  ) => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
 
   const submitAgentStatus = async () => {
     if (!canAgentUpdate || !idNum) return;
@@ -481,6 +568,39 @@ export default function TicketDetailsPage() {
     await adminOverride.mutateAsync(payload);
     setReason("");
     setReferenceTicketId(null);
+  };
+
+  const submitKbSuggestionAccept = async () => {
+    if (!isUser || !idNum) return;
+    await respondToKbSuggestionMutation.mutateAsync({ action: "ACCEPT" });
+    openSnackbar("Thanks. The suggested article was marked as helpful.", "success");
+  };
+
+  const submitKbSuggestionReject = async () => {
+    if (!isUser || !idNum) return;
+    await respondToKbSuggestionMutation.mutateAsync({ action: "REJECT" });
+    openSnackbar("Thanks. The ticket will continue for further handling.", "info");
+  };
+
+  const submitGenerateKbDraft = async () => {
+    if (!isAgent || !idNum || selectedPublicCommentIds.length === 0) return;
+
+    const res = await generateKbDraftMutation.mutateAsync({
+      publicCommentIds: selectedPublicCommentIds,
+    });
+
+    setKbDraftDialogOpen(false);
+    setSelectedPublicCommentIds([]);
+
+    if (res?.draftKbId) {
+      openSnackbar("KB draft generated successfully.", "success");
+    } else {
+      openSnackbar(
+        "KB draft generation was requested. It may still be processing.",
+        "info"
+      );
+      setDraftPollingActive(true);
+    }
   };
 
   const renderOverrideNewValueField = () => {
@@ -619,11 +739,17 @@ export default function TicketDetailsPage() {
     Boolean(internalTicketData?.vagueReason) ||
     Boolean(internalTicketData?.clarificationPrompt);
 
+  const kbSuggestionBlockingRouting =
+    internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
+    internalTicketData?.status === "KB_SUGGESTED";
+
   const routingSummaryLabel =
     duplicateState === "CONFIRMED"
       ? "Routing skipped"
       : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
       ? "Routing waiting on review"
+      : kbSuggestionBlockingRouting
+      ? "Routing waiting on user"
       : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
       ? "Routing completed"
       : "Routing pending";
@@ -632,6 +758,8 @@ export default function TicketDetailsPage() {
     duplicateState === "CONFIRMED"
       ? "default"
       : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
+      ? "warning"
+      : kbSuggestionBlockingRouting
       ? "warning"
       : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
       ? "success"
@@ -742,6 +870,18 @@ export default function TicketDetailsPage() {
               />
             )}
 
+            {userKbSuggestionPending && (
+              <KbSuggestionPanel
+                title={userTicket?.suggestedKbTitle}
+                preview={userTicket?.suggestedKbPreview}
+                isSubmitting={respondToKbSuggestionMutation.isPending}
+                onViewArticle={() => setKbArticleOpen(true)}
+                onAccept={submitKbSuggestionAccept}
+                onReject={submitKbSuggestionReject}
+                isError={respondToKbSuggestionMutation.isError}
+              />
+            )}
+
             <Box sx={{ width: "100%" }}>
               <TicketDetailsComments ticketId={idNum} role={auth.role ?? "USER"} />
             </Box>
@@ -803,15 +943,15 @@ export default function TicketDetailsPage() {
                           ? "success"
                           : "info"
                       }
-                      icon={
-                        classificationFailed ? <ErrorOutlineIcon /> : <CheckCircleOutlineIcon />
-                      }
+                      icon={classificationFailed ? <ErrorOutlineIcon /> : <CheckCircleOutlineIcon />}
                     />
+
                     <SummaryChip
                       label={vagueActive ? "Needs clarification" : "Vague check complete"}
                       tone={vagueActive ? "warning" : "success"}
                       icon={vagueActive ? <HelpOutlineIcon /> : <CheckCircleOutlineIcon />}
                     />
+
                     <SummaryChip
                       label={
                         duplicateState === "CONFIRMED"
@@ -829,6 +969,37 @@ export default function TicketDetailsPage() {
                       }
                       icon={<ContentCopyOutlinedIcon />}
                     />
+
+                    <SummaryChip
+                      label={
+                        internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED"
+                          ? "KB waiting on user"
+                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "ACCEPTED"
+                          ? "KB accepted"
+                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "REJECTED"
+                          ? "KB rejected"
+                          : internalTicketData?.suggestedKbId
+                          ? "KB suggested"
+                          : duplicateState === "CONFIRMED"
+                          ? "KB skipped"
+                          : "KB pending / none"
+                      }
+                      tone={
+                        internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED"
+                          ? "warning"
+                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "ACCEPTED"
+                          ? "success"
+                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "REJECTED"
+                          ? "info"
+                          : internalTicketData?.suggestedKbId
+                          ? "info"
+                          : duplicateState === "CONFIRMED"
+                          ? "default"
+                          : "info"
+                      }
+                      icon={<AutorenewIcon />}
+                    />
+
                     <SummaryChip
                       label={routingSummaryLabel}
                       tone={routingSummaryTone}
@@ -992,6 +1163,45 @@ export default function TicketDetailsPage() {
                         )}
                       </Stack>
                     )}
+                  </Paper>                  
+                )}
+                {isAgent && (canGenerateKbDraft || canOpenExistingKbDraft) && (
+                  <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
+                    <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>KB Drafting</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
+                      Generate or continue a knowledge base draft from the resolved ticket and its
+                      public resolution comments.
+                    </Typography>
+
+                    <Stack spacing={0.8}>
+                      {internalTicketData?.kbDraftExists ? (
+                        <>
+                          <CompactInfoRow
+                            label="Draft"
+                            value={
+                              internalTicketData?.draftKbId
+                                ? `${internalTicketData?.draftKbTitle ?? "KB Draft"} (KB #${internalTicketData.draftKbId})`
+                                : "Draft exists"
+                            }
+                          />
+                          <CompactInfoRow
+                            label="Status"
+                            value={internalTicketData?.draftKbStatus ?? "—"}
+                          />
+                          <Button variant="outlined" disabled>
+                            View / Edit Draft
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="contained"
+                          onClick={() => setKbDraftDialogOpen(true)}
+                          disabled={!canGenerateKbDraft}
+                        >
+                          Generate KB Draft
+                        </Button>
+                      )}
+                    </Stack>
                   </Paper>
                 )}
               </Stack>
@@ -1187,9 +1397,37 @@ export default function TicketDetailsPage() {
                 </Stack>
               )}
             </DialogContent>
-          </Dialog>
+          </Dialog>         
         </>
       )}
+      <KbArticleDialog
+        kbId={
+          isUser
+            ? userTicket?.suggestedKbId ?? null
+            : internalTicketData?.suggestedKbId ?? null
+        }
+        open={kbArticleOpen}
+        onClose={() => setKbArticleOpen(false)}
+        titleOverride="Suggested Knowledge Base Article"
+      />
+      {!isUser && (
+        <GenerateKbDraftDialog
+          open={kbDraftDialogOpen}
+          onClose={() => setKbDraftDialogOpen(false)}
+          comments={commentsQuery.data ?? []}
+          selectedIds={selectedPublicCommentIds}
+          onSelectedIdsChange={setSelectedPublicCommentIds}
+          onGenerate={submitGenerateKbDraft}
+          isSubmitting={generateKbDraftMutation.isPending}
+          isError={generateKbDraftMutation.isError}
+        />
+      )}
+      <GlobalSnackbar
+        open={snackbarOpen}
+        message={snackbarMessage}
+        severity={snackbarSeverity}
+        onClose={() => setSnackbarOpen(false)}
+      />
     </>
   );
 }
