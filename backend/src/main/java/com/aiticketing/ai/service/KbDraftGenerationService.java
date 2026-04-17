@@ -95,10 +95,9 @@ public class KbDraftGenerationService {
             JsonNode node = objectMapper.readTree(raw);
 
             KbDraftGenerationResult result = new KbDraftGenerationResult();
-            result.title = jsonTextOrNull(node, "title");
-            result.body = jsonTextOrNull(node, "body");
-            result.confidence = node.path("confidence").isNumber() ? node.path("confidence").decimalValue() : null;
-            result.reason = jsonTextOrNull(node, "reason");
+            result.title = sanitizePlainText(jsonTextOrNull(node, "title"));
+            result.body = sanitizePlainTextBody(jsonTextOrNull(node, "body"));          
+            result.reason = sanitizePlainText(jsonTextOrNull(node, "reason"));
             result.rawOutputJson = raw;
 
             if (result.title == null || result.title.isBlank()) {
@@ -156,6 +155,52 @@ public class KbDraftGenerationService {
         return sb.toString().trim();
     }
 
+    private String sanitizePlainText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String sanitized = value;
+
+        //remove markdown emphasis markers
+        sanitized = sanitized.replace("**", "");
+        sanitized = sanitized.replace("*", "");
+
+        //normalize whitespace
+        sanitized = sanitized.replaceAll("[ \\t]+", " ").trim();
+
+        return sanitized;
+    }
+
+    private String sanitizePlainTextBody(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String sanitized = value;
+
+        //remove markdown emphasis markers
+        sanitized = sanitized.replace("**", "");
+        sanitized = sanitized.replace("*", "");
+
+        //normalize spaces but keep line breaks
+        sanitized = sanitized.replace("\r\n", "\n");
+        sanitized = sanitized.replace("\r", "\n");
+        sanitized = sanitized.replaceAll("[ \\t]+", " ");
+
+        //trim each line
+        String[] lines = sanitized.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+            sb.append(line.trim());
+        }
+
+        return sb.toString().trim();
+    }
+    
     private String safe(String value) {
         return value == null ? "" : value.replace("\n", " ").trim();
     }

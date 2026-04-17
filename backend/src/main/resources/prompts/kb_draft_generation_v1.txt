@@ -18,9 +18,12 @@ Instructions:
    - the problem/symptom
    - the steps the user should try
    - when to contact support
-5. Do not include placeholders like [insert here].
-6. Keep the title specific and issue-focused.
-7. Keep the body well-structured and readable.
+5. Keep the title specific and issue-focused.
+6. Keep the body well-structured and readable.
+7. Return the body as plain text only.
+8. Do not use markdown formatting such as **bold**, *italics*, headings, code fences, or markdown bullet syntax.
+9. Use normal sentences and simple numbered steps only where helpful.
+10. Do not include placeholders like [insert here].
 
 Return ONLY raw JSON.
 Do NOT wrap the JSON in markdown code fences.
