@@ -146,7 +146,7 @@ public class MetricsServiceImpl implements MetricsService {
 
         long assignmentOverrideCount = queryForLongValue("""
                 SELECT COUNT(*)
-                FROM admin_overrides
+                FROM admin_overrides ao
                 WHERE ao_override_type = 'ASSIGNMENT'
                 	AND EXISTS (
                 		SELECT 1
@@ -160,7 +160,7 @@ public class MetricsServiceImpl implements MetricsService {
         //Using all override decisions per distinct ticket because one ticket can have multiple assignment override decisions but we are calculating the accuracy per last version routed ticket and not per ticket version
         long routingOverriddenTicketCount = queryForLongValue("""
                 SELECT COUNT(DISTINCT ao_ticket_id)
-                FROM admin_overrides
+                FROM admin_overrides ao
                 WHERE ao_override_type = 'ASSIGNMENT'
                 	AND EXISTS (
                 		SELECT 1
