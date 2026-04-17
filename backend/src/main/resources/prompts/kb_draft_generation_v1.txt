@@ -33,6 +33,5 @@ Return exactly one JSON object in this shape:
 {
   "title": "...",
   "body": "...",
-  "confidence": 0.0,
   "reason": "..."
 }

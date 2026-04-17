@@ -382,14 +382,7 @@ public class MetricsServiceImpl implements MetricsService {
                 WHERE oe_event_type = 'KB_DRAFT_REQUESTED'
                   AND oe_status = 'DONE'
                 """);
-
-        //AI draft confidence from ai_decisions
-        double avgDraftConfidence = queryForDoubleValue("""
-                SELECT COALESCE(AVG(ad_confidence), 0)
-                FROM ai_decisions
-                WHERE ad_decision_type = 'KB_DRAFT'
-                """);
-
+        
         //Drafts submitted for review
         long submittedForReviewCount = queryForLongValue("""
                 SELECT COUNT(*)
@@ -429,8 +422,7 @@ public class MetricsServiceImpl implements MetricsService {
                 """);
 
         draft.draftGenerationAttempts = draftGenerationAttempts;
-        draft.draftGenerationSuccessRate = calculatePercentage(draftGenerationSucceeded, draftGenerationAttempts);
-        draft.averageDraftGenerationConfidence = roundToFourDecimals(avgDraftConfidence);
+        draft.draftGenerationSuccessRate = calculatePercentage(draftGenerationSucceeded, draftGenerationAttempts);        
 
         draft.submittedForReviewCount = submittedForReviewCount;
         draft.draftApprovalRate = calculatePercentage(approvedDraftCount, submittedForReviewCount);

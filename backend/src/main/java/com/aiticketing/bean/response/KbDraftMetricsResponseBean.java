@@ -4,8 +4,7 @@ public class KbDraftMetricsResponseBean {
 
     //stage throughput
     public long draftGenerationAttempts;
-    public double draftGenerationSuccessRate;
-    public Double averageDraftGenerationConfidence;
+    public double draftGenerationSuccessRate;    
 
     //workflow progression
     public long submittedForReviewCount;

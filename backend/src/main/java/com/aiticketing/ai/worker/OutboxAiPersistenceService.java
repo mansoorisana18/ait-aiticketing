@@ -497,8 +497,7 @@ public class OutboxAiPersistenceService {
 	    } catch (Exception e) {
 	        rawJsonObject = Map.of(
 	                "title", result.title,
-	                "body", result.body,
-	                "confidence", result.confidence,
+	                "body", result.body,	                
 	                "reason", result.reason
 	        );
 	    }
@@ -508,7 +507,7 @@ public class OutboxAiPersistenceService {
             work.textVersion,
             AiDecisionType.KB_DRAFT.name(),
             rawJsonObject,
-            result.confidence,
+            null,
             null,
             null
 	    ));
