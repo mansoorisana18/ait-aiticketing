@@ -37,21 +37,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { to: "/admin/users", label: "Manage Users", show: isAdmin },
     { to: "/admin/analytics", label: "Analytics", show: isAdmin },
 
-    { to: "/kb", label: "Knowledge Base", show: true },
-    { to: "/kb/my-submissions", label: "My KB Submissions", show: isAgent },
-    { to: "/kb/approvals", label: "KB Approvals", show: isAdmin },
+    //KB
+    { to: "/kb", label: "Knowledge Base", show: isAgent },
+    { to: "/admin/kb", label: "Knowledge Management", show: isAdmin },
   ];
 
   const visible = links.filter((l) => l.show);
 
   const isSelected = (to: string) => {
-    if (to === "/tickets" && loc.pathname === "/tickets") return true;
-    if (to === "/tickets/new" && loc.pathname === "/tickets/new") return true;
-    if (to === "/agent/tickets" && loc.pathname.startsWith("/agent")) return true;
-    if (to === "/admin/tickets" && loc.pathname === "/admin/tickets") return true;
-    if (to === "/admin/users" && loc.pathname === "/admin/users") return true;
-    if (to === "/admin/analytics" && loc.pathname === "/admin/analytics") return true;
-    if (to.startsWith("/kb") && loc.pathname.startsWith("/kb")) return true;
+    if (to === "/tickets") return loc.pathname === "/tickets";
+    if (to === "/tickets/new") return loc.pathname === "/tickets/new";
+
+    if (to === "/agent/tickets") return loc.pathname.startsWith("/agent/tickets");
+
+    if (to === "/admin/tickets") return loc.pathname === "/admin/tickets";
+    if (to === "/admin/users") return loc.pathname === "/admin/users";
+    if (to === "/admin/analytics") return loc.pathname === "/admin/analytics";
+
+    if (to === "/kb") {
+      return (
+        loc.pathname === "/kb" ||
+        /^\/kb\/\d+$/.test(loc.pathname) ||
+        /^\/agent\/kb\/\d+\/draft$/.test(loc.pathname)
+      );
+    }
+
+    if (to === "/admin/kb") {
+      return (
+        loc.pathname === "/admin/kb" ||
+        loc.pathname === "/admin/kb/new" ||
+        loc.pathname === "/admin/kb/review" ||
+        /^\/admin\/kb\/\d+\/edit$/.test(loc.pathname)
+      );
+    }
+
     return loc.pathname === to;
   };
 

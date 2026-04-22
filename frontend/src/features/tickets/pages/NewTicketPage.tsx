@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Box, Paper, Typography, Stack } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { replace, useNavigate } from "react-router-dom";
 
 import TicketForm from "../components/TicketForm";
 import GlobalSnackbar from "../../../components/GlobalSnackbar";
@@ -18,7 +18,7 @@ export default function NewTicketPage() {
     setFieldErrors({});
     try {
       const created = await createTicket.mutateAsync(payload);
-      nav(`/tickets/${created.ticketId}`);
+      nav(`/tickets/${created.ticketId}`, { replace: true});
     } catch (e) {
       const ne = normalizeApiError(e);
       if (ne.kind === "validation") setFieldErrors(ne.fieldErrors ?? {});

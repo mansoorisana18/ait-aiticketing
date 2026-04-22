@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Accordion,
   AccordionDetails,
@@ -23,8 +23,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import { alpha } from "@mui/material/styles";
 
 import { useAuth } from "../../../state/AuthContext";
@@ -67,6 +69,8 @@ import {
   useTicketComments, 
 } from "../hooks";
 
+import { usePublishedKbArticles } from "../../kb/hooks";
+
 const AGENT_STATUS_OPTIONS: UpdateTicketStatusRequestBean["status"][] = [
   "IN_PROGRESS",
   "RESOLVED",
@@ -93,7 +97,7 @@ const CARD_SX = {
   boxShadow: "0 2px 10px rgba(2,48,71,0.05)",
 } as const;
 
-/** App bar offset used when smooth-scrolling to Band 3 of AI Automation. */
+/** App bar offset used when smooth-scrolling to Band 3 of Ticket Automation. */
 const APPBAR_SCROLL_OFFSET = 88;
 
 function getAllowedStatusOverrideOptions(ticket: TicketResponseBean): TicketStatus[] {
@@ -119,7 +123,7 @@ function getAllowedStatusOverrideOptions(ticket: TicketResponseBean): TicketStat
 }
 
 function getAllowedOverrideTypes(ticket: TicketResponseBean): AdminOverrideType[] {
-  const allowed: AdminOverrideType[] = ["CATEGORY", "PRIORITY", "KB_DRAFT"];
+  const allowed: AdminOverrideType[] = ["CATEGORY", "PRIORITY"];
 
   const statusOptions = getAllowedStatusOverrideOptions(ticket);
   if (statusOptions.length > 0) {
@@ -254,6 +258,7 @@ function SummaryChip({
 export default function TicketDetailsPage() {
   const { auth } = useAuth();
   const { ticketId } = useParams();
+  const nav = useNavigate();
   const idNum = ticketId ? Number(ticketId) : null;
 
   const isUser = auth.role === "USER";
@@ -303,9 +308,10 @@ export default function TicketDetailsPage() {
   );
 
   const [kbArticleOpen, setKbArticleOpen] = React.useState(false);
+  const [dialogKbId, setDialogKbId] = React.useState<number | null>(null);
   const [kbDraftDialogOpen, setKbDraftDialogOpen] = React.useState(false);
   const [selectedPublicCommentIds, setSelectedPublicCommentIds] = React.useState<number[]>([]);
-  const [manualKbArticleId, setManualKbArticleId] = React.useState<number | null>(null);
+  const [manualKbId, setManualKbId] = React.useState<number | null>(null);
 
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState("");
@@ -331,6 +337,15 @@ export default function TicketDetailsPage() {
   const confirmedDuplicatesQuery = useConfirmedDuplicates(
     idNum,
     Boolean(idNum && auth.token && !isUser && confirmedDuplicatesOpen)
+  );
+
+  const publishedKbQuery = usePublishedKbArticles(
+    Boolean(
+      auth.token &&
+        isAgent &&
+        internalTicket?.assignedToUserId != null &&
+        internalTicket.assignedToUserId === auth.userId
+    )
   );
 
   const isLoading = isUser ? userQuery.isLoading : internalQuery.isLoading;
@@ -463,11 +478,12 @@ export default function TicketDetailsPage() {
     isAgent &&
     internalTicketData!.assignedToUserId != null &&
     internalTicketData!.assignedToUserId === auth.userId;
+  
+  const userHasKbSuggestion = isUser && Boolean(userTicket?.suggestedKbId);
 
   const userKbSuggestionPending =
-  isUser &&
-  userTicket?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
-  Boolean(userTicket?.suggestedKbId);
+    userHasKbSuggestion &&
+    userTicket?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED";
 
   const showClarification =
     isUser &&
@@ -483,6 +499,8 @@ export default function TicketDetailsPage() {
 
   const canOpenExistingKbDraft =
     !isUser && Boolean(internalTicketData?.kbDraftExists && internalTicketData?.draftKbId);
+
+  const showKbDraftCard = isAgent && (canGenerateKbDraft || canOpenExistingKbDraft);
 
   const canManualSuggestKb =
     isAgent &&
@@ -605,13 +623,13 @@ export default function TicketDetailsPage() {
   };
 
   const submitManualKbSuggestion = async () => {
-    if (!isAgent || !idNum || manualKbArticleId == null) return;
+    if (!isAgent || !idNum || manualKbId == null) return;
 
     await manualKbSuggestionMutation.mutateAsync({
-      kbId: manualKbArticleId,
+      kbId: manualKbId,
     });
 
-    setManualKbArticleId(null);
+    setManualKbId(null);
     openSnackbar("KB article was suggested to the user.", "success");
   };
 
@@ -751,29 +769,64 @@ export default function TicketDetailsPage() {
     Boolean(internalTicketData?.vagueReason) ||
     Boolean(internalTicketData?.clarificationPrompt);
 
-  const kbSuggestionBlockingRouting =
-    internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED" &&
-    internalTicketData?.status === "KB_SUGGESTED";
+  const pipelineBlockedByVague =
+    internalTicketData?.status === "VAGUE" ||
+    Boolean(internalTicketData?.clarificationPrompt) ||
+    Boolean(internalTicketData?.vagueReason);
+
+  const kbSuggestionStatusUpper =
+    internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() ?? "";
+
+  const kbSourceUpper =
+    internalTicketData?.kbSuggestionSource?.toString().toUpperCase() ?? "";
+
+  const isAiKb = kbSourceUpper === "AI";
+  const isManualKb = kbSourceUpper === "MANUAL_AGENT";
+  const kbAccepted = kbSuggestionStatusUpper === "ACCEPTED";
+  const kbRejected = kbSuggestionStatusUpper === "REJECTED";
+  const kbWaitingOnUser =
+    kbSuggestionStatusUpper === "SUGGESTED" && internalTicketData?.status === "KB_SUGGESTED";
+
+  const kbSuggestedArticleExists = Boolean(internalTicketData?.suggestedKbId);
+  const kbSuggestionFailed = Boolean(internalTicketData?.kbSuggestionFailed);
+
+  const kbSuggestionBlockingRouting = kbWaitingOnUser;
+
+  const routingWasPerformed = Boolean(
+    internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
+  );
 
   const routingSummaryLabel =
-    duplicateState === "CONFIRMED"
+    pipelineBlockedByVague
+      ? "Routing pending"
+      : duplicateState === "CONFIRMED"
       ? "Routing skipped"
+      : kbAccepted && isAiKb && !routingWasPerformed
+      ? "Routing skipped"
+      : kbAccepted && isManualKb
+      ? "Routing already completed"
       : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
       ? "Routing waiting on review"
-      : kbSuggestionBlockingRouting
+      : kbSuggestionBlockingRouting && isAiKb
       ? "Routing waiting on user"
-      : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
+      : routingWasPerformed
       ? "Routing completed"
       : "Routing pending";
 
   const routingSummaryTone =
-    duplicateState === "CONFIRMED"
+    pipelineBlockedByVague
       ? "default"
+      : duplicateState === "CONFIRMED"
+      ? "default"
+      : kbAccepted && isAiKb && !routingWasPerformed
+      ? "default"
+      : kbAccepted && isManualKb
+      ? "success"
       : duplicateState === "POTENTIAL" && internalTicketData?.status === "DUPLICATE_REVIEW"
       ? "warning"
-      : kbSuggestionBlockingRouting
+      : kbSuggestionBlockingRouting && isAiKb
       ? "warning"
-      : internalTicketData?.assignedToName || internalTicketData?.firstAssignedAt
+      : routingWasPerformed
       ? "success"
       : "info";
 
@@ -797,7 +850,18 @@ export default function TicketDetailsPage() {
            Band 1: Header + Meta
            ========================= */}
         <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.35 }}>
-          <Stack spacing={1}>
+          <Stack spacing={0.8}>
+            <Box>
+              <Button
+                variant="text"
+                startIcon={<ArrowBackOutlinedIcon />}
+                onClick={() => nav(-1)}
+                sx={{ px: 0, minWidth: 0 }}
+              >
+                Back
+              </Button>
+            </Box>
+            
             <Stack
               direction={{ xs: "column", lg: "row" }}
               justifyContent="space-between"
@@ -887,11 +951,55 @@ export default function TicketDetailsPage() {
                 title={userTicket?.suggestedKbTitle}
                 preview={userTicket?.suggestedKbPreview}
                 isSubmitting={respondToKbSuggestionMutation.isPending}
-                onViewArticle={() => setKbArticleOpen(true)}
+                onViewArticle={() => {
+                  setDialogKbId(userTicket?.suggestedKbId ?? null);
+                  setKbArticleOpen(true);
+                }}
                 onAccept={submitKbSuggestionAccept}
                 onReject={submitKbSuggestionReject}
                 isError={respondToKbSuggestionMutation.isError}
               />
+            )}
+
+            {!userKbSuggestionPending && userHasKbSuggestion && (
+              <Paper variant="outlined" sx={CARD_SX}>
+                <Stack spacing={0.9}>
+                  <Typography sx={{ fontWeight: 900 }}>Suggested Solution</Typography>
+
+                  <Typography variant="body2" color="text.secondary">
+                    {userTicket?.kbSuggestionStatus?.toString().toUpperCase() === "ACCEPTED"
+                      ? "This ticket was resolved using the article below."
+                      : userTicket?.kbSuggestionStatus?.toString().toUpperCase() === "REJECTED"
+                      ? "An article was suggested for this ticket, but it did not resolve the issue."
+                      : "A helpful article was suggested for this ticket."}
+                  </Typography>
+
+                  <CompactInfoRow
+                    label="Article"
+                    value={
+                      userTicket?.suggestedKbId
+                        ? `${userTicket?.suggestedKbTitle ?? "KB Article"} (KB #${userTicket.suggestedKbId})`
+                        : "—"
+                    }
+                  />
+
+                  <CompactInfoRow
+                    label="Suggestion Status"
+                    value={userTicket?.kbSuggestionStatus ?? "—"}
+                  />
+
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      setDialogKbId(userTicket?.suggestedKbId ?? null);
+                      setKbArticleOpen(true);
+                    }}
+                    disabled={!userTicket?.suggestedKbId}
+                  >
+                    View Article
+                  </Button>
+                </Stack>
+              </Paper>
             )}
 
             <Box sx={{ width: "100%" }}>
@@ -924,7 +1032,7 @@ export default function TicketDetailsPage() {
             )}
             {/* =========================
                Band 2:
-               Left = Description + compact AI summary
+               Left = Description + compact Automation summary
                Right = Current state + action
                ========================= */}
             <Box
@@ -937,7 +1045,7 @@ export default function TicketDetailsPage() {
             >
               <Stack spacing={1.1}>
                 <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
-                  <Typography sx={{ fontWeight: 900, mb: 0.65 }}>AI Summary</Typography>
+                  <Typography sx={{ fontWeight: 900, mb: 0.65 }}>Automation Summary</Typography>
 
                   <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap sx={{ mb: 0.85 }}>
                     <SummaryChip
@@ -966,14 +1074,18 @@ export default function TicketDetailsPage() {
 
                     <SummaryChip
                       label={
-                        duplicateState === "CONFIRMED"
+                        pipelineBlockedByVague
+                          ? "Duplicate check pending"
+                          : duplicateState === "CONFIRMED"
                           ? "Confirmed duplicate"
                           : duplicateState === "POTENTIAL"
                           ? "Potential duplicate"
                           : "No duplicate found"
                       }
                       tone={
-                        duplicateState === "CONFIRMED"
+                        pipelineBlockedByVague
+                          ? "default"
+                          : duplicateState === "CONFIRMED"
                           ? "info"
                           : duplicateState === "POTENTIAL"
                           ? "warning"
@@ -984,32 +1096,48 @@ export default function TicketDetailsPage() {
 
                     <SummaryChip
                       label={
-                        internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED"
-                          ? "KB waiting on user"
-                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "ACCEPTED"
-                          ? "KB accepted"
-                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "REJECTED"
-                          ? "KB rejected"
-                          : internalTicketData?.suggestedKbId
-                          ? "KB suggested"
+                        pipelineBlockedByVague
+                          ? "KB evaluation pending"
                           : duplicateState === "CONFIRMED"
                           ? "KB skipped"
-                          : "KB pending / none"
+                          : kbAccepted && isManualKb
+                          ? "Agent KB accepted"
+                          : kbAccepted && isAiKb
+                          ? "AI KB accepted"
+                          : kbRejected && isManualKb
+                          ? "Agent KB rejected"
+                          : kbRejected && isAiKb
+                          ? "AI KB rejected"
+                          : kbWaitingOnUser && isManualKb
+                          ? "Agent KB waiting"
+                          : kbWaitingOnUser && isAiKb
+                          ? "AI KB waiting"
+                          : kbSuggestionFailed
+                          ? "AI KB failed"
+                          : kbSuggestedArticleExists && isManualKb
+                          ? "Agent KB suggested"
+                          : kbSuggestedArticleExists && isAiKb
+                          ? "AI KB suggested"
+                          : "No KB suggested"
                       }
                       tone={
-                        internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "SUGGESTED"
-                          ? "warning"
-                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "ACCEPTED"
-                          ? "success"
-                          : internalTicketData?.kbSuggestionStatus?.toString().toUpperCase() === "REJECTED"
-                          ? "info"
-                          : internalTicketData?.suggestedKbId
-                          ? "info"
+                        pipelineBlockedByVague
+                          ? "default"
                           : duplicateState === "CONFIRMED"
                           ? "default"
-                          : "info"
+                          : kbAccepted
+                          ? "success"
+                          : kbRejected
+                          ? "info"
+                          : kbWaitingOnUser
+                          ? "warning"
+                          : kbSuggestionFailed
+                          ? "error"
+                          : kbSuggestedArticleExists
+                          ? "info"
+                          : "default"
                       }
-                      icon={<AutorenewIcon />}
+                      icon={<MenuBookOutlinedIcon />}
                     />
 
                     <SummaryChip
@@ -1028,9 +1156,168 @@ export default function TicketDetailsPage() {
                   </Stack>
 
                   <Button variant="outlined" onClick={openAndScrollToJourney}>
-                    View full AI journey
+                    View Full journey
                   </Button>
                 </Paper>
+
+                {/* {Agent Knowledge Actions} */}
+                {isAgent && (
+                  <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
+                    <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>Knowledge Actions</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>
+                      Suggest an existing knowledge article to the user or create reusable knowledge
+                      from a resolved ticket.
+                    </Typography>
+
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: {
+                          xs: "1fr",
+                          xl: showKbDraftCard ? "repeat(2, minmax(0, 1fr))" : "1fr",
+                        },
+                        gap: 1,
+                      }}
+                    >
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 0.9,
+                          borderRadius: 2,
+                          border: "1px solid rgba(2,48,71,0.08)",
+                        }}
+                      >
+                        <Stack spacing={0.8}>
+                          <Typography sx={{ fontWeight: 900 }}>Manual KB Suggestion</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Suggest a published KB article directly to the user when you know an
+                            article that can help resolve the issue.
+                          </Typography>
+
+                          {!canManualSuggestKb ? (
+                            internalTicketData?.status === "KB_SUGGESTED" ? (
+                              <Alert severity="info">
+                                A knowledge base article has already been suggested and is currently waiting for the user's response.
+                              </Alert>
+                            ) : (
+                              <Alert severity="info">
+                                Manual KB suggestion is not available for the current ticket state.
+                              </Alert>
+                            )
+                          ) : (
+                            <Stack spacing={0.8}>
+                              <TextField
+                                select
+                                label="Published KB Article"
+                                value={manualKbId ?? ""}
+                                onChange={(e) =>
+                                  setManualKbId(
+                                    e.target.value === "" ? null : Number(e.target.value)
+                                  )
+                                }
+                                size="small"
+                                disabled={publishedKbQuery.isLoading}
+                                helperText="Select a published KB article to suggest to the user."
+                              >
+                                <MenuItem value="">—</MenuItem>
+                                {(publishedKbQuery.data ?? []).map((kb) => (
+                                  <MenuItem key={kb.kbId} value={kb.kbId}>
+                                    {kb.title} (KB #{kb.kbId})
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+
+                              <Stack direction={{ xs: "column", sm: "row" }} spacing={0.8}>
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => {
+                                    if (!manualKbId) return;
+                                    setDialogKbId(manualKbId);
+                                    setKbArticleOpen(true);
+                                  }}
+                                  disabled={manualKbId == null}
+                                >
+                                  View Article
+                                </Button>
+
+                                <Button
+                                  variant="contained"
+                                  onClick={submitManualKbSuggestion}
+                                  disabled={
+                                    manualKbSuggestionMutation.isPending || manualKbId == null
+                                  }
+                                >
+                                  {manualKbSuggestionMutation.isPending
+                                    ? "Suggesting..."
+                                    : "Suggest KB Article"}
+                                </Button>
+                              </Stack>
+
+                              {manualKbSuggestionMutation.isError && (
+                                <Alert severity="error">
+                                  Failed to suggest KB article to the user.
+                                </Alert>
+                              )}
+                            </Stack>
+                          )}
+                        </Stack>
+                      </Paper>
+                      
+                      {showKbDraftCard && (
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 1,
+                            borderRadius: 2,
+                            border: "1px solid rgba(2,48,71,0.08)",
+                          }}
+                        >
+                          <Stack spacing={0.8}>
+                            <Typography sx={{ fontWeight: 900 }}>KB Drafting</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Generate or continue a knowledge base draft from the resolved ticket
+                              and its public resolution comments.
+                            </Typography>
+
+                            {internalTicketData?.kbDraftExists ? (
+                              <>
+                                <CompactInfoRow
+                                  label="Draft"
+                                  value={
+                                    internalTicketData?.draftKbId
+                                      ? `${internalTicketData?.draftKbTitle ?? "KB Draft"} (KB #${internalTicketData.draftKbId})`
+                                      : "Draft exists"
+                                  }
+                                />
+                                <CompactInfoRow
+                                  label="Status"
+                                  value={internalTicketData?.draftKbStatus ?? "—"}
+                                />
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => {
+                                    if (!internalTicketData?.draftKbId) return;
+                                    nav(`/agent/kb/${internalTicketData.draftKbId}/draft`);
+                                  }}
+                                >
+                                  View / Edit Draft
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="contained"
+                                onClick={() => setKbDraftDialogOpen(true)}
+                                disabled={!canGenerateKbDraft}
+                              >
+                                Generate KB Draft
+                              </Button>
+                            )}
+                          </Stack>
+                        </Paper>
+                      )}
+                    </Box>
+                  </Paper>
+                )}
               </Stack>
 
               <Stack spacing={1.1}>
@@ -1046,6 +1333,28 @@ export default function TicketDetailsPage() {
                         internalTicketData?.primaryTicketId
                           ? `${internalTicketData.primaryTicketTitle ?? "Ticket"} (Ticket #${internalTicketData.primaryTicketId})`
                           : "Not linked"
+                      }
+                    />
+                    <CompactInfoRow
+                      label="KB Suggestion Status"
+                      value={internalTicketData?.kbSuggestionStatus ?? "—"}
+                    />
+                    <CompactInfoRow
+                      label="KB Suggestion Source"
+                      value={
+                        internalTicketData?.kbSuggestionSource === "MANUAL_AGENT"
+                          ? "Manual agent suggestion"
+                          : internalTicketData?.kbSuggestionSource === "AI"
+                          ? "AI suggestion"
+                          : "—"
+                      }
+                    />
+                    <CompactInfoRow
+                      label="Suggested KB"
+                      value={
+                        internalTicketData?.suggestedKbId
+                          ? `${internalTicketData?.suggestedKbTitle ?? "KB Article"} (KB #${internalTicketData.suggestedKbId})`
+                          : "None"
                       }
                     />
                     <CompactInfoRow
@@ -1133,7 +1442,7 @@ export default function TicketDetailsPage() {
                     <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
                       <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>Agent Action</Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
-                        Update workflow status for tickets assigned to you.
+                        Update the ticket workflow status when this ticket is assigned to you.
                       </Typography>
 
                       {!canAgentUpdate ? (
@@ -1177,107 +1486,13 @@ export default function TicketDetailsPage() {
                         </Stack>
                       )}
                     </Paper>
-
-                    {canAgentUpdate && (
-                      <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
-                        <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>
-                          Manual KB Suggestion
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
-                          Suggest an existing KB article directly to the user when you know a
-                          relevant article that can help resolve the issue.
-                        </Typography>
-
-                        {!canManualSuggestKb ? (
-                          <Alert severity="info">
-                            Manual KB suggestion is not available for the current ticket state.
-                          </Alert>
-                        ) : (
-                          <Stack spacing={0.8}>
-                            <TextField
-                              label="KB Article ID"
-                              value={manualKbArticleId ?? ""}
-                              onChange={(e) =>
-                                setManualKbArticleId(
-                                  e.target.value === "" ? null : Number(e.target.value)
-                                )
-                              }
-                              size="small"
-                              inputProps={{
-                                inputMode: "numeric",
-                                pattern: "[0-9]*",
-                              }}
-                              helperText="Enter the existing KB article id to suggest to the user."
-                            />
-
-                            <Button
-                              variant="outlined"
-                              onClick={submitManualKbSuggestion}
-                              disabled={
-                                manualKbSuggestionMutation.isPending || manualKbArticleId == null
-                              }
-                            >
-                              {manualKbSuggestionMutation.isPending
-                                ? "Suggesting..."
-                                : "Suggest KB Article"}
-                            </Button>
-
-                            {manualKbSuggestionMutation.isError && (
-                              <Alert severity="error">
-                                Failed to suggest KB article to the user.
-                              </Alert>
-                            )}
-                          </Stack>
-                        )}
-                      </Paper>
-                    )}
-
-                    {isAgent && (canGenerateKbDraft || canOpenExistingKbDraft) && (
-                      <Paper variant="outlined" sx={{ ...CARD_SX, p: 1.1 }}>
-                        <Typography sx={{ fontWeight: 1000, mb: 0.3 }}>KB Drafting</Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.9 }}>
-                          Generate or continue a knowledge base draft from the resolved ticket and
-                          its public resolution comments.
-                        </Typography>
-
-                        <Stack spacing={0.8}>
-                          {internalTicketData?.kbDraftExists ? (
-                            <>
-                              <CompactInfoRow
-                                label="Draft"
-                                value={
-                                  internalTicketData?.draftKbId
-                                    ? `${internalTicketData?.draftKbTitle ?? "KB Draft"} (KB #${internalTicketData.draftKbId})`
-                                    : "Draft exists"
-                                }
-                              />
-                              <CompactInfoRow
-                                label="Status"
-                                value={internalTicketData?.draftKbStatus ?? "—"}
-                              />
-                              <Button variant="outlined" disabled>
-                                View / Edit Draft
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="contained"
-                              onClick={() => setKbDraftDialogOpen(true)}
-                              disabled={!canGenerateKbDraft}
-                            >
-                              Generate KB Draft
-                            </Button>
-                          )}
-                        </Stack>
-                      </Paper>
-                    )}
                   </>
                 )}
               </Stack>
             </Box>
 
             {/* =========================
-              Band 3: Expandable full AI journey
+              Band 3: Expandable full Ticket journey
             ========================= */}
             
             <Box ref={aiJourneyRef}>
@@ -1296,7 +1511,7 @@ export default function TicketDetailsPage() {
                 }}
               >
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography sx={{ fontWeight: 900 }}>AI Journey Details</Typography>
+                  <Typography sx={{ fontWeight: 900 }}>Ticket Journey Details</Typography>
                 </AccordionSummary>
                 <AccordionDetails sx={{ p: 1.1 }}>
                   <AiAutomationPanel
@@ -1321,14 +1536,13 @@ export default function TicketDetailsPage() {
       </Stack>
 
       <KbArticleDialog
-        kbId={
-          isUser
-            ? userTicket?.suggestedKbId ?? null
-            : internalTicketData?.suggestedKbId ?? null
-        }
+        kbId={dialogKbId}
         open={kbArticleOpen}
-        onClose={() => setKbArticleOpen(false)}
-        titleOverride="Suggested Knowledge Base Article"
+        onClose={() => {
+          setKbArticleOpen(false);
+          setDialogKbId(null);
+        }}
+        titleOverride="Knowledge Base Article"
       />
 
       {!isUser && (

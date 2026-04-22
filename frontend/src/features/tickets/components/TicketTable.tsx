@@ -26,13 +26,13 @@ type Props = {
 };
 
 function isInternal(t: AnyTicketRow): t is TicketResponseBean {
-  return (t as any).status !== undefined && (t as any).userTicketStatus !== undefined;
+  return "status" in t;
 }
 
 export default function TicketTable({ tickets, role }: Props) {
   const nav = useNavigate();
   const showInternalCols = role === "AGENT" || role === "ADMIN";
-  const colSpan = showInternalCols ? 10 : 4;
+  const colSpan = showInternalCols ? 11 : 5;
 
   return (
     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
@@ -65,6 +65,7 @@ export default function TicketTable({ tickets, role }: Props) {
         <TableBody>
           {tickets.map((t) => {
             const internal = isInternal(t);
+
             const hasClarificationInfo =
               internal &&
               ((t.vagueCount != null && t.vagueCount > 0) ||
@@ -72,7 +73,6 @@ export default function TicketTable({ tickets, role }: Props) {
                 Boolean(t.clarificationPrompt));
 
             const isInternalVague = internal && t.status === "VAGUE";
-            // const isInternalKbSuggested = internal && t.status === "KB_SUGGESTED";
 
             const isUserKbSuggested =
               !internal &&
@@ -83,8 +83,8 @@ export default function TicketTable({ tickets, role }: Props) {
               !internal &&
               !isUserKbSuggested &&
               (Boolean(t.clarificationPrompt) || Boolean(t.vagueReason));
-            
-              return (
+
+            return (
               <TableRow
                 key={t.ticketId}
                 hover
@@ -145,7 +145,7 @@ export default function TicketTable({ tickets, role }: Props) {
                       }}
                     >
                       <Typography variant="caption" sx={{ fontWeight: 700, color: "#0369A1" }}>
-                        Suggested solution available — user action required
+                        Suggested solution available - user action required
                       </Typography>
                     </Box>
                   )}
@@ -202,7 +202,7 @@ export default function TicketTable({ tickets, role }: Props) {
                         <Chip
                           label={(t.duplicateState ?? "NONE").toString()}
                           size="small"
-                          sx={duplicateStateChipSx((t.duplicateState ?? "NONE").toString()) }
+                          sx={duplicateStateChipSx((t.duplicateState ?? "NONE").toString())}
                         />
                         {t.primaryTicketId ? (
                           <Typography variant="caption" color="text.secondary">
@@ -216,12 +216,18 @@ export default function TicketTable({ tickets, role }: Props) {
                   </TableCell>
                 )}
 
-                {showInternalCols && <TableCell>{internal ? (t.aiCategory ?? "—") : "—"}</TableCell>}
+                {showInternalCols && (
+                  <TableCell>{internal ? (t.aiCategory ?? "—") : "—"}</TableCell>
+                )}
 
                 {showInternalCols && (
                   <TableCell>
                     {internal && t.aiPriority ? (
-                      <Chip label={t.aiPriority} size="small" sx={{ ...priorityChipSx(t.aiPriority) }} />
+                      <Chip
+                        label={t.aiPriority}
+                        size="small"
+                        sx={{ ...priorityChipSx(t.aiPriority) }}
+                      />
                     ) : (
                       "—"
                     )}
@@ -233,6 +239,7 @@ export default function TicketTable({ tickets, role }: Props) {
                     {internal ? (formatRelative(t.aiTriagedAt ?? null) ?? "—") : "—"}
                   </TableCell>
                 )}
+
                 {showInternalCols && (
                   <TableCell>{internal ? (t.assignedToName ?? "Unassigned") : "—"}</TableCell>
                 )}

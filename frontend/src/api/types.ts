@@ -139,6 +139,9 @@ export type TicketResponseBean = {
   kbSuggestionStatus?: KbSuggestionStatus | string | null;
   kbSuggestionSource?: string | null;
   suggestedKbSimilarity?: number | null;
+  //KB suggestion failure tracking
+  kbSuggestionFailed?: boolean | null;
+  kbSuggestionError?: string | null;
 
   //KB draft summary
   draftKbId?: number | null;
@@ -390,7 +393,6 @@ export type KbSuggestionMetricsResponseBean = {
 export type KbDraftMetricsResponseBean = {
   draftGenerationAttempts: number;
   draftGenerationSuccessRate: number;
-  averageDraftGenerationConfidence?: number | null;
 
   submittedForReviewCount: number;
   draftApprovalRate: number;

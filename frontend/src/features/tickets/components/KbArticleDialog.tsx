@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoadingSkeleton from "../../../components/LoadingSkeleton";
-import { useKbArticle } from "../hooks";
+import { useKbArticleById } from "../../kb/hooks";
 import { formatDateTime } from "../../../utils/dateTime";
 
 export default function KbArticleDialog({
@@ -24,7 +24,7 @@ export default function KbArticleDialog({
   onClose: () => void;
   titleOverride?: string;
 }) {
-  const query = useKbArticle(kbId, open && typeof kbId === "number");
+  const query = useKbArticleById(kbId, open && typeof kbId === "number");
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
@@ -65,7 +65,7 @@ export default function KbArticleDialog({
               </Stack>
 
               <Typography sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
-                {query.data.content}
+                {query.data.body}
               </Typography>
             </Stack>
           </Paper>

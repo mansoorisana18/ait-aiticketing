@@ -259,22 +259,37 @@ export default function AiAutomationPanel({
 
   const kbSuggestionBlockedWaitingForUser =
     ticket.status === "KB_SUGGESTED" || kbSuggestionStatus === "SUGGESTED";
+  
+  const kbSourceUpper = (ticket.kbSuggestionSource ?? "").toString().toUpperCase();
+  const isAiKb = kbSourceUpper === "AI";
+  const isManualKb = kbSourceUpper === "MANUAL_AGENT";
 
   const kbSuggestionAccepted = kbSuggestionStatus === "ACCEPTED";
   const kbSuggestionRejected = kbSuggestionStatus === "REJECTED";
+  const kbSuggestionFailed = Boolean(ticket.kbSuggestionFailed);
 
   const kbSuggestionStatusLabel =
-    kbSuggestionAccepted
+    kbSuggestionAccepted && isManualKb
+      ? "Agent accepted"
+      : kbSuggestionAccepted && isAiKb
       ? "Accepted"
-      : kbSuggestionRejected
+      : kbSuggestionRejected && isManualKb
+      ? "Agent rejected"
+      : kbSuggestionRejected && isAiKb
       ? "Rejected"
-      : kbSuggestionBlockedWaitingForUser
+      : kbSuggestionBlockedWaitingForUser && isManualKb
+      ? "Agent suggested"
+      : kbSuggestionBlockedWaitingForUser && isAiKb
       ? "Waiting on user"
+      : kbSuggestionFailed
+      ? "Failed"
       : kbSuggestionSkippedForDuplicate
       ? "Skipped"
       : kbSuggestionPending
       ? "Pending"
-      : ticket.suggestedKbId
+      : ticket.suggestedKbId && isManualKb
+      ? "Agent suggested"
+      : ticket.suggestedKbId && isAiKb
       ? "Suggested"
       : "No suggestion";
 
@@ -282,38 +297,50 @@ export default function AiAutomationPanel({
     kbSuggestionAccepted
       ? "success"
       : kbSuggestionRejected
-      ? "warning"
+      ? "info"
       : kbSuggestionBlockedWaitingForUser
       ? "warning"
+      : kbSuggestionFailed
+      ? "error"
       : kbSuggestionSkippedForDuplicate
       ? "default"
       : kbSuggestionPending
       ? "info"
       : ticket.suggestedKbId
       ? "info"
-      : "success";
+      : "default";
 
   const routingBlockedByKbSuggestion = kbSuggestionBlockedWaitingForUser;
+
+  const routingWasPerformed = Boolean(ticket.assignedToName || ticket.firstAssignedAt);
 
   const routingStatusLabel =
     duplicateState === "CONFIRMED"
       ? "Skipped"
-      : routingBlockedByKbSuggestion
+      : kbSuggestionAccepted && isAiKb && !routingWasPerformed
+      ? "Skipped"
+      : kbSuggestionAccepted && isManualKb
+      ? "Already completed"
+      : routingBlockedByKbSuggestion && isAiKb
       ? "Waiting on user"
       : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
       ? "Waiting on review"
-      : ticket.assignedToName || ticket.firstAssignedAt
+      : routingWasPerformed
       ? "Completed"
       : "Pending";
 
   const routingStatusTone =
     duplicateState === "CONFIRMED"
       ? "default"
-      : routingBlockedByKbSuggestion
+      : kbSuggestionAccepted && isAiKb && !routingWasPerformed
+      ? "default"
+      : kbSuggestionAccepted && isManualKb
+      ? "success"
+      : routingBlockedByKbSuggestion && isAiKb
       ? "warning"
       : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
       ? "warning"
-      : ticket.assignedToName || ticket.firstAssignedAt
+      : routingWasPerformed
       ? "success"
       : "info";
 
@@ -511,14 +538,25 @@ export default function AiAutomationPanel({
                 ? "Skipped because the ticket was confirmed as a duplicate."
                 : kbSuggestionPending
                 ? "KB suggestion has not run yet because earlier pipeline stages are not complete."
-                : kbSuggestionBlockedWaitingForUser
-                ? "Waiting for the user to review the suggested article and respond."
-                : kbSuggestionAccepted
-                ? "The user accepted the suggested article as solving the issue."
-                : kbSuggestionRejected
-                ? "The user rejected the suggested article and the ticket can continue toward further help."
-                : ticket.suggestedKbId
-                ? "A KB article was suggested for potential self-resolution."
+                : kbSuggestionBlockedWaitingForUser && isAiKb
+                ? "An AI-suggested KB article is waiting for the user's response."
+                : kbSuggestionBlockedWaitingForUser && isManualKb
+                ? "An agent manually suggested a KB article and it is waiting for the user's response."
+                : kbSuggestionAccepted && isAiKb
+                ? "The user accepted the AI-suggested article."
+                : kbSuggestionAccepted && isManualKb
+                ? "The user accepted the agent-suggested article."
+                : kbSuggestionRejected && isAiKb
+                ? "The user rejected the AI-suggested article."
+                : kbSuggestionRejected && isManualKb
+                ? "The user rejected the agent-suggested article."
+                : kbSuggestionFailed
+                ? ticket.kbSuggestionError ??
+                  "AI KB suggestion failed, but routing may still continue because this stage is optional."
+                : ticket.suggestedKbId && isAiKb
+                ? "A KB article was suggested automatically for potential self-resolution."
+                : ticket.suggestedKbId && isManualKb
+                ? "A KB article was suggested manually by an agent."
                 : "No KB suggestion was made for this ticket."
             }
             multiline
@@ -536,8 +574,17 @@ export default function AiAutomationPanel({
             value={ticket.suggestedKbPreview ?? "No KB preview available"}
             multiline
           />
-          <InfoLine label="Suggestion status" value={ticket.kbSuggestionStatus ?? "—"} />
-          <InfoLine label="Suggestion source" value={ticket.kbSuggestionSource ?? "—"} />
+          <InfoLine label="Suggestion status" value={ticket.kbSuggestionStatus ?? "—"} />      
+          <InfoLine
+            label="Suggestion source"
+            value={
+              ticket.kbSuggestionSource === "MANUAL_AGENT"
+                ? "Manual agent suggestion"
+                : ticket.kbSuggestionSource === "AI"
+                ? "AI suggestion"
+                : "—"
+            }
+          />
           <InfoLine
             label="Similarity"
             value={formatSimilarity(ticket.suggestedKbSimilarity ?? null)}
@@ -559,12 +606,18 @@ export default function AiAutomationPanel({
             value={
               duplicateState === "CONFIRMED"
                 ? "Routing not needed because this ticket is linked to a primary ticket."
-                : routingBlockedByKbSuggestion
-                ? "Routing is waiting for the user's response to the suggested KB article."
+                : kbSuggestionAccepted && isAiKb && !routingWasPerformed
+                ? "Routing not needed because the user accepted the AI-suggested KB article before routing."
+                : kbSuggestionAccepted && isManualKb
+                ? "Routing had already been completed before the agent manually suggested a KB article."
+                : routingBlockedByKbSuggestion && isAiKb
+                ? "Routing is waiting for the user's response to the AI-suggested KB article."
                 : duplicateState === "POTENTIAL" && ticket.status === "DUPLICATE_REVIEW"
                 ? "Routing is waiting for the duplicate review decision."
-                : ticket.assignedToName || ticket.firstAssignedAt
+                : routingWasPerformed
                 ? "Routing completed successfully."
+                : kbSuggestionFailed
+                ? "AI KB suggestion failed, but routing can still continue because KB suggestion is optional."
                 : "Routing has not yet been performed."
             }
             multiline

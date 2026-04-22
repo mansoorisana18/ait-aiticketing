@@ -21,6 +21,8 @@ import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 type SummaryMetric = {
   label: string;
   value: number | string;
+  onClick?: () => void;
+  isSelected?: boolean;
 };
 
 function metricVisual(label: string) {
@@ -151,18 +153,37 @@ function SummaryMetricCard({
 }) {
   const visual = metricVisual(metric.label);
 
+  const isClickable = Boolean(metric.onClick);
+  const isSelected = Boolean(metric.isSelected);
+
   return (
     <Paper
       variant="outlined"
+      onClick={metric.onClick}
       sx={{
         px: 1,
         py: 0.85,
         borderRadius: 1.75,
         backgroundColor:
-          tone === "completed" ? "rgba(248,251,252,0.92)" : "rgba(255,255,255,0.84)",
-        border: visual.border,
+          tone === "completed"
+            ? "rgba(248,251,252,0.92)"
+            : isSelected
+            ? "rgba(33,158,188,0.12)"
+            : "rgba(255,255,255,0.84)",
+        border: isSelected
+          ? "1px solid rgba(33,158,188,0.28)"
+          : visual.border,
         minWidth: 0,
         height: "100%",
+        cursor: isClickable ? "pointer" : "default",
+        transition: "all 120ms ease",
+
+        "&:hover": isClickable
+          ? {
+              transform: "translateY(-1px)",
+              boxShadow: "0 4px 10px rgba(2,48,71,0.08)",
+            }
+          : undefined,
       }}
     >
       <Stack spacing={0.45}>

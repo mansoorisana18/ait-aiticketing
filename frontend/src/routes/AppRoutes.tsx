@@ -19,9 +19,13 @@ import ManageUsersPage from "../features/admin/pages/ManageUsersPage";
 import AnalyticsPage from "../features/metrics/pages/AnalyticsPage";
 
 import KbListPage from "../features/kb/pages/KbListPage";
-import MyKbSubmissionsPage from "../features/kb/pages/MyKbSubmissionsPage";
-import KbApprovalsPage from "../features/kb/pages/KbApprovalsPage";
 import KbDetailsPage from "../features/kb/pages/KbDetailsPage";
+
+import AdminKbPage from "../features/kb/pages/AdminKbPage";
+import AdminKbReviewPage from "../features/kb/pages/AdminKbReviewPage";
+import AdminKbCreatePage from "../features/kb/pages/AdminKbCreatePage";
+import AdminKbEditPage from "../features/kb/pages/AdminKbEditPage";
+import AgentKbDraftEditPage from "../features/kb/pages/AgentKbDraftEditPage";
 
 function HomeRedirect() {
   const { auth } = useAuth();
@@ -57,7 +61,7 @@ export default function AppRoutes() {
         {/* AGENT-only */}
         <Route element={<RoleRoute allowedRoles={["AGENT"]} />}>
           <Route path="/agent/tickets" element={<AgentTicketsPage />} />
-          <Route path="/kb/my-submissions" element={<MyKbSubmissionsPage />} />
+          <Route path="/agent/kb/:kbId/draft" element={<AgentKbDraftEditPage />} />          
         </Route>
 
         {/* Admin-only */}
@@ -65,7 +69,10 @@ export default function AppRoutes() {
           <Route path="/admin/tickets" element={<AdminTicketsPage />} />
           <Route path="/admin/users" element={<ManageUsersPage />} />
           <Route path="/admin/analytics" element={<AnalyticsPage />} />
-           <Route path="/kb/approvals" element={<KbApprovalsPage />} />
+          <Route path="/admin/kb" element={<AdminKbPage />} />
+          <Route path="/admin/kb/review" element={<AdminKbReviewPage />} />
+          <Route path="/admin/kb/new" element={<AdminKbCreatePage />} />
+          <Route path="/admin/kb/:kbId/edit" element={<AdminKbEditPage />} />
         </Route>
       </Route>
 

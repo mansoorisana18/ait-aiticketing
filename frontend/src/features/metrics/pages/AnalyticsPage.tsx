@@ -169,14 +169,6 @@ export default function AnalyticsPage() {
         interpretation="Higher values suggest stronger semantic alignment between issues and suggested articles."
         calculation="Average similarity score across KB suggestions."
       />
-
-      <MetricCard
-        title="Manual Suggestion Count"
-        value={kbSuggestion.manualSuggestionCount}
-        summary="Number of KB suggestions manually triggered by agents."
-        interpretation="Higher values indicate more agent fallback usage instead of relying purely on automatic suggestions."
-        calculation="Count of manual KB suggestions triggered by agents."
-      />
     </Box>
   );
 
@@ -245,22 +237,6 @@ export default function AnalyticsPage() {
       />
 
       <MetricCard
-        title="Average Draft Generation Confidence"
-        value={formatConfidence(kbDraft.averageDraftGenerationConfidence)}
-        summary="Average confidence of the AI-generated KB draft output."
-        interpretation="Higher values suggest the drafting model is more confident in the generated article content."
-        calculation="Average confidence across generated KB drafts."
-      />
-
-      <MetricCard
-        title="Submitted For Review Count"
-        value={kbDraft.submittedForReviewCount}
-        summary="Number of KB drafts that have been submitted for admin review."
-        interpretation="Higher values indicate more generated drafts are progressing into the review stage."
-        calculation="Count of KB drafts submitted for review."
-      />
-
-      <MetricCard
         title="Average Review Turnaround"
         value={
           kbDraft.averageReviewTurnaroundHours == null
@@ -284,7 +260,7 @@ export default function AnalyticsPage() {
 
   return (
     <Stack spacing={1.75}>
-            {/* Hero band */}
+      {/* Hero band */}
       <Paper
         variant="outlined"
         sx={{
