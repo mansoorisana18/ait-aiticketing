@@ -49,22 +49,27 @@ export function useCreateTicket() {
   });
 }
 
-export function useTicketsForUser(enabled = true) {
+export function useTicketsForUser(enabled: boolean) {
   return useQuery<UserTicketResponseBean[]>({
     queryKey: ["tickets", "user"],
     queryFn: fetchTicketsForUser,
     enabled,
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 30000 : undefined,
   });
 }
 
 //Ticket Details for user
-export function useTicketDetailsUser(ticketId: number | null, enabled = true) {
+export function useTicketDetailsUser(ticketId: number | null, enabled: boolean) {
   return useQuery<UserTicketResponseBean>({
     queryKey: ["ticket", "user", ticketId],
     queryFn: () => fetchTicketByIdForUser(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -82,50 +87,61 @@ export function useClarifyVagueTicket(ticketId: number) {
 }
 
 //Ticket Details for agent/admin
-export function useTicketDetailsInternal(ticketId: number | null, enabled = true) {
+export function useTicketDetailsInternal(ticketId: number | null, enabled: boolean) {
   return useQuery<TicketResponseBean>({
     queryKey: ["ticket", "internal", ticketId],
     queryFn: () => fetchTicketByIdInternal(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
-export function useAllTicketsAdmin(enabled = true) {
+export function useAllTicketsAdmin(enabled: boolean) {
   return useQuery<TicketResponseBean[]>({
     queryKey: ["tickets", "admin", "all"],
     queryFn: fetchAllTicketsAdmin,
     enabled,
-    staleTime: 15_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 20000 : undefined,
   });
 }
 
-export function useTicketsForAgent(enabled = true) {
+export function useTicketsForAgent(enabled: boolean) {
   return useQuery<TicketResponseBean[]>({
     queryKey: ["tickets", "agent"],
     queryFn: fetchTicketsForAgent,
     enabled,
-    staleTime: 15_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 20000 : undefined,
   });
 }
 
 //Text version history for agent/admin
-export function useTicketTextVersionHistory(ticketId: number | null, enabled = true) {
+export function useTicketTextVersionHistory(ticketId: number | null, enabled: boolean) {
   return useQuery<TicketTextVersionResponseBean[]>({
     queryKey: ["ticket", ticketId, "text-history"],
     queryFn: () => fetchTicketTextVersionHistory(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 
 //Comments
-export function useTicketComments(ticketId: number | null, enabled = true) {
+export function useTicketComments(ticketId: number | null, enabled: boolean, poll: boolean = false) {
   return useQuery<TicketCommentResponseBean[]>({
     queryKey: ["ticket", ticketId, "comments"],
     queryFn: () => fetchTicketComments(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 5_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled && poll ? 5000 : undefined,    
   });
 }
 
@@ -170,21 +186,21 @@ export function useAgentUpdateStatus(ticketId: number) {
   });
 }
 
-export function useConfirmedDuplicates(ticketId: number | null, enabled = true) {
+export function useConfirmedDuplicates(ticketId: number | null, enabled: boolean) {
   return useQuery<ConfirmedDuplicateTicketResponseBean[]>({
     queryKey: ["ticket", ticketId, "confirmed-duplicates"],
     queryFn: () => fetchConfirmedDuplicates(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 
-export function usePrimaryLink(ticketId: number | null, enabled = true) {
+export function usePrimaryLink(ticketId: number | null, enabled: boolean) {
   return useQuery<PrimaryLinkedTicketResponseBean>({
     queryKey: ["ticket", ticketId, "primary-link"],
     queryFn: () => fetchPrimaryLink(ticketId as number),
     enabled: enabled && typeof ticketId === "number",
-    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 

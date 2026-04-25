@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Box, Paper, Typography, Stack } from "@mui/material";
-import { replace, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import TicketForm from "../components/TicketForm";
 import GlobalSnackbar from "../../../components/GlobalSnackbar";

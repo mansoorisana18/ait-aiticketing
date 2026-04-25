@@ -271,6 +271,62 @@ export default function TicketDetailsPage() {
   const userTicket = userQuery.data as UserTicketResponseBean | undefined;
   const internalTicket = internalQuery.data as TicketResponseBean | undefined;
 
+  const shouldPollInternalDetails =
+    !isUser &&
+    !!internalTicket &&
+    (
+      internalTicket.status === "NEW" ||
+      internalTicket.status === "AI_PROCESSING" ||
+      internalTicket.status === "VAGUE" ||
+      internalTicket.status === "KB_SUGGESTED" ||
+      internalTicket.status === "DUPLICATE_REVIEW" ||
+      internalTicket.status === "IN_PROGRESS" ||
+      (internalTicket.status === "READY" &&
+        !internalTicket.assignedToName &&
+        !internalTicket.assignedToUserId)
+    );
+
+  // const userStatusUpper = userTicket?.userTicketStatus?.toString().toUpperCase() ?? "OPEN";
+
+  const shouldPollUserDetails =
+    isUser &&
+    Boolean(idNum && auth.token) &&
+    userTicket?.userTicketStatus === "OPEN";
+  
+  React.useEffect(() => {
+    if (!auth.token || !idNum || !isUser) return;
+    if (!shouldPollUserDetails) return;
+
+    const interval = window.setInterval(() => {
+      userQuery.refetch();
+    }, 7000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    auth.token,
+    idNum,
+    isUser,
+    shouldPollUserDetails,
+    userQuery.refetch    
+  ]);
+
+  React.useEffect(() => {
+    if (!auth.token || !idNum || isUser) return;
+    if (!shouldPollInternalDetails) return;
+
+    const interval = window.setInterval(() => {
+      internalQuery.refetch();
+    }, 7000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    auth.token,
+    idNum,
+    isUser,
+    shouldPollInternalDetails,
+    internalQuery.refetch
+  ]);
+
   const duplicateState = (internalTicket?.duplicateState ?? "NONE").toString().toUpperCase();
 
   const clarifyMutation = useClarifyVagueTicket(idNum ?? -1);
@@ -301,10 +357,18 @@ export default function TicketDetailsPage() {
   const respondToKbSuggestionMutation = useRespondToKbSuggestion(idNum ?? -1);
   const generateKbDraftMutation = useGenerateKbDraft(idNum ?? -1);
   const manualKbSuggestionMutation = useManualKbSuggestion(idNum ?? -1);
+  
+  const shouldPollComments =
+    isUser
+      ? userTicket?.userTicketStatus === "OPEN" || userTicket?.userTicketStatus === "IN PROGRESS"
+      : internalTicket?.status === "READY" ||
+        internalTicket?.status === "IN_PROGRESS" ||
+        internalTicket?.status === "KB_SUGGESTED";
 
   const commentsQuery = useTicketComments(
     idNum,
-    Boolean(idNum && auth.token && !isUser)
+    Boolean(idNum && auth.token),
+    shouldPollComments
   );
 
   const [kbArticleOpen, setKbArticleOpen] = React.useState(false);

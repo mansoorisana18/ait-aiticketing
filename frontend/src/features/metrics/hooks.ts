@@ -9,36 +9,38 @@ import type {
   TicketSummaryMetricsResponseBean,
 } from "../../api/types";
 
-const STALE_TIME = 30_000;
-const REFRESH_INTERVAL = 60_000;
-
-export function useAdminAiSummary(enabled = true) {
+export function useAdminAiSummary(enabled: boolean) {
   return useQuery<AiSummaryMetricsResponseBean>({
     queryKey: ["metrics", "admin", "ai-summary"],
     queryFn: fetchAdminAiSummary,
     enabled,
-    staleTime: STALE_TIME,
-    refetchInterval: REFRESH_INTERVAL,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 20000 : undefined, 
   });
 }
 
-export function useAdminTicketSummary(enabled = true) {
+export function useAdminTicketSummary(enabled: boolean) {
   return useQuery<TicketSummaryMetricsResponseBean>({
     queryKey: ["metrics", "admin", "ticket-summary"],
     queryFn: fetchAdminTicketSummary,
     enabled,
-    staleTime: STALE_TIME,
-    refetchInterval: REFRESH_INTERVAL,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 20000 : undefined,
   });
 }
 
-export function useAgentTicketSummary(enabled = true) {
+export function useAgentTicketSummary(enabled: boolean) {
   return useQuery<TicketSummaryMetricsResponseBean>({
     queryKey: ["metrics", "agent", "ticket-summary"],
     queryFn: fetchAgentTicketSummary,
     enabled,
-    staleTime: STALE_TIME,
-    refetchInterval: REFRESH_INTERVAL,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: enabled ? 20000 : undefined,
   });
 }
