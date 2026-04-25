@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,6 +70,9 @@ public class OutboxAiPersistenceService {
     private final KbSuggestionRepository kbSuggestionRepo;
     private final ObjectMapper objectMapper;
 
+    @Value("${aiticketing.ai.triage.max-vague-rounds}")
+    private int maxVagueRounds;
+    
     public OutboxAiPersistenceService(OutboxEventRepository outboxRepo, UserRepository userRepo,
 			TicketRepository ticketRepo, AiDecisionRepository aiDecisionRepo,
 			TicketDuplicateLinkRepository duplicateLinkRepo, KbArticleRepository kbArticleRepo,
@@ -170,7 +174,7 @@ public class OutboxAiPersistenceService {
 		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistTriageSuccess() :: oeId={} eventType={} ticketId={}",
 				work.outboxId, work.eventType, work.aggregateId);
 
-		//2.2) update ticket with successful AI triage results & status as READY
+		//2.2) update ticket with successful AI triage results
 		ticket.setAiCategory(result.category);
 		ticket.setAiPriority(result.priority);
 		ticket.setAiConfidence(result.confidence);
@@ -178,19 +182,28 @@ public class OutboxAiPersistenceService {
 		ticket.setAiFailed(false);
 		ticket.setAiLastError(null);
 		ticket.setUpdatedAt(now);
+		
+		//Count clarification rounds using current text version:
+		//v1 = original submission, v2+ = user clarification/update rounds
+		int vagueRoundsSoFar = Math.max(0, ticket.getCurrentTextVersion() - 1);
+	    boolean allowAnotherVagueRound = vagueRoundsSoFar < maxVagueRounds;
 
-		if (Boolean.TRUE.equals(result.isVague)) {
-			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is VAGUE :: oeId={} ticketId={}",
-					work.outboxId, work.aggregateId);
+	    //Persist VAGUE on ticket only if: AI said vague AND we still allow another clarification round
+	    boolean effectiveVagueForWorkflow = Boolean.TRUE.equals(result.isVague) && allowAnotherVagueRound;
+
+		if (effectiveVagueForWorkflow) {
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is VAGUE :: oeId={} ticketId={} vagueRoundsSoFar={} maxVagueRounds={}",
+					work.outboxId, work.aggregateId, vagueRoundsSoFar, maxVagueRounds);
 			ticket.setStatus(TicketStatus.VAGUE);
 			ticket.setVagueCount(ticket.getVagueCount() == null ? 1 : ticket.getVagueCount() + 1);
 			ticket.setLastVagueAt(now);
 			ticket.setVagueReason(result.vagueReason);
 			ticket.setClarificationPrompt(result.clarificationPrompt);
 		} else {
-			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is READY :: oeId={} ticketId={}",
-					work.outboxId, work.aggregateId);
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Ticket is READY :: oeId={} ticketId={} aiIsVague={} vagueRoundsSoFar={} maxVagueRounds={}",
+					work.outboxId, work.aggregateId, result.isVague, vagueRoundsSoFar, maxVagueRounds);
 			ticket.setStatus(TicketStatus.READY);
+			//We don't surface another clarification prompt once vague cap is reached, move TICKET to READY
 			ticket.setVagueReason(null);
 			ticket.setClarificationPrompt(null);
 		}
@@ -206,6 +219,7 @@ public class OutboxAiPersistenceService {
 				Map.of("priority", result.priority.name()), result.confidence, null, null));
 
 		//4.3) Persist AI decisions for audit + dashboards in ai_decisions table (for Vague)
+		//We keep the raw AI vague result as-is for governance, even if workflow cap prevents another user clarification round
 		Map<String, Object> vagueJson = new LinkedHashMap<>();
 		vagueJson.put("isVague", result.isVague);
 		vagueJson.put("vagueReason", result.vagueReason);
@@ -216,8 +230,9 @@ public class OutboxAiPersistenceService {
 		PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Added TRIAGE steps in ai_decisions table :: oeId={} ticketId={}",
 				work.outboxId, work.aggregateId);
 
-		//Insert event_type DUPLICATE_CHECK_REQUESTED as PENDING in outbox table if ticket is not VAGUE
-		if (!Boolean.TRUE.equals(result.isVague)) {
+		//Insert event_type DUPLICATE_CHECK_REQUESTED as PENDING in outbox table if ticket is actionable for workflow
+	    //This includes: AI said not vague & AI said vague but vague-cap was already reached
+		if (!effectiveVagueForWorkflow) {
 			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in persistTriageSuccess() :: Inserting DUPLICATE_CHECK_REQUESTED in outbox :: oeId={} ticketId={}",
 					work.outboxId, work.aggregateId);
 			OutboxEvent duplicateEvent = new OutboxEvent();
@@ -238,8 +253,8 @@ public class OutboxAiPersistenceService {
 		outbox.setLastError(null);
 		outboxRepo.save(outbox);
 
-		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistTriageSuccess() :: oeId={} eventType={} ticketId={} isVague={}",
-				work.outboxId, work.eventType, work.aggregateId, result.isVague);
+		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: exit persistTriageSuccess() :: oeId={} eventType={} ticketId={} aiIsVague={} effectiveVagueForWorkflow={} vagueRoundsSoFar={} maxVagueRounds={}",
+	            work.outboxId, work.eventType, work.aggregateId, result.isVague, effectiveVagueForWorkflow, vagueRoundsSoFar, maxVagueRounds);
 	}
 
 	//3) Persist DUPLICATE CHECK SUCCESS in a fresh transaction

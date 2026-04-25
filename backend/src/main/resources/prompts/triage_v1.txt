@@ -28,14 +28,21 @@ Output JSON schema:
 }
 
 Rules:
-1. If the ticket has enough actionable information, set "isVague" to false.
-2. If "isVague" is false:
+1. Classify category and priority based on the ticket content.
+2. A ticket is vague ONLY if the issue is too unclear for an agent to begin handling, investigating, or routing it.
+3. If the ticket already clearly states:
+   - what system/feature is affected
+   - what problem or symptom is happening
+   then set "isVague" to false, even if more technical details could help later.
+4. Do NOT ask for optional diagnostic details (such as browser, device, environment) unless they are required to understand the issue itself.
+5. Do NOT ask the user to perform troubleshooting steps.
+6. Do NOT suggest solutions or workarounds.
+7. If "isVague" is false:
    - "vagueReason" must be null
    - "clarificationPrompt" must be null
-3. If the ticket does NOT have enough actionable information, set "isVague" to true.
-4. If "isVague" is true:
+8. If "isVague" is true:
    - "vagueReason" must be a short plain-English sentence.
-   - "clarificationPrompt" must be a short helpful message that can be displayed directly in the UI without extra formatting.
+   - "clarificationPrompt" must be a short user-facing message.
    - Do not use markdown, bullet points, numbering, or labels.
-5. Always return category and priority even when the ticket is vague.
-6. Confidence must be a number between 0 and 1.
+9. Always return category and priority even when the ticket is vague.
+10. Confidence must be a number between 0 and 1.
