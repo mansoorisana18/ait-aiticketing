@@ -58,6 +58,7 @@ public class SecurityConfig {
 	        		.requestMatchers("/api/users/register", "/api/users/login").permitAll()
 	                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 	                .requestMatchers(HttpMethod.POST, "/api/users/refresh").permitAll()
+	                .requestMatchers(HttpMethod.GET, "/actuator/**").permitAll()
 	                
 	                //Logout requires auth so that we can revoke that users refresh token
 	                .requestMatchers(HttpMethod.POST, "/api/users/logout").authenticated()
