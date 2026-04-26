@@ -1,0 +1,23 @@
+# Build output
+target/
+
+# Git
+.git
+
+# Env / secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+
+# IDE (STS / Eclipse)
+.project
+.classpath
+.settings/
+
+#frontend 
+node_modules/
