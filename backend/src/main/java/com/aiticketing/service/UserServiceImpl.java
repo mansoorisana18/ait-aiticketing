@@ -128,7 +128,7 @@ public class UserServiceImpl implements UserService {
         ResponseCookie cookie = ResponseCookie.from("refresh_token", refreshTokenRaw)
                 .httpOnly(true)
                 .secure(refreshCookieSecure) //false on localhost; true on HTTPS
-                .sameSite("Lax")
+                .sameSite(refreshCookieSecure? "None" : "Lax")
                 .path("/api/users") //cookie sent to /api/users/refresh and /api/users/logout
                 .maxAge(Duration.ofDays(7))
                 .build();
