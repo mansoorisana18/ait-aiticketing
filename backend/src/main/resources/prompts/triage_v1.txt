@@ -29,16 +29,12 @@ Output JSON schema:
 
 Rules:
 1. Classify category and priority from the ticket.
-2. A ticket is vague ONLY if required information is missing to begin actual work.
-3. If the request depends on an existing record (such as an order, payment, account, ticket, or transaction), then missing identifying information makes it vague.
-4. If the request is a new request (such as a demo, onboarding, or general inquiry), do NOT mark it vague for missing scheduling, contact, or preference details.
-5. Do NOT mark a ticket vague just because more details could help later.
-6. If "isVague" is true:
-   - ask only for the minimum required missing information
-   - ask one concise question
-7. Do NOT ask for troubleshooting steps or suggestions.
-8. If "isVague" is false:
-   - "vagueReason" must be null
-   - "clarificationPrompt" must be null
+2. Mark vague only if the ticket cannot be categorized, routed, or acted on because the core issue or required record/request identifier is missing.
+3. If the ticket includes a clear identifier for the affected record/request, do not ask for additional identity, account, date, device, or context fields at this stage.
+4. If the request does not depend on an existing record, mark vague only when the request/issue itself is unclear.
+5. Do not mark vague just because more details may help later.
+6. Do not ask for troubleshooting steps, solutions, preferences, or nice-to-have details.
+7. If "isVague" is true, ask one concise question for only the minimum blocking information.
+8. If "isVague" is false, "vagueReason" and "clarificationPrompt" must be null.
 9. Always return category and priority.
 10. Confidence must be between 0 and 1.
