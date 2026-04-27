@@ -28,21 +28,17 @@ Output JSON schema:
 }
 
 Rules:
-1. Classify category and priority based on the ticket content.
-2. A ticket is vague ONLY if the issue is too unclear for an agent to begin handling, investigating, or routing it.
-3. A ticket is usually NOT VAGUE if it clearly states:
-   - what system/feature is affected
-   - what problem or symptom is happening
-4. HOWEVER, if the issue depends on a specific entity (such as an order, payment, transaction, or similar) and the required identifier is missing, then the ticket can be considered vague.
-5. Do NOT ask for optional diagnostic details (such as browser, device, environment) unless they are required to understand the issue itself.
-6. Do NOT ask the user to perform troubleshooting steps.
-7. Do NOT suggest solutions or workarounds.
+1. Classify category and priority from the ticket.
+2. A ticket is vague ONLY if required information is missing to begin actual work.
+3. If the request depends on an existing record (such as an order, payment, account, ticket, or transaction), then missing identifying information makes it vague.
+4. If the request is a new request (such as a demo, onboarding, or general inquiry), do NOT mark it vague for missing scheduling, contact, or preference details.
+5. Do NOT mark a ticket vague just because more details could help later.
+6. If "isVague" is true:
+   - ask only for the minimum required missing information
+   - ask one concise question
+7. Do NOT ask for troubleshooting steps or suggestions.
 8. If "isVague" is false:
    - "vagueReason" must be null
    - "clarificationPrompt" must be null
-9. If "isVague" is true:
-   - "vagueReason" must be a short plain-English sentence.
-   - "clarificationPrompt" must ask ONLY for the missing critical information and should be a short user-facing message.
-   - Do not use markdown, bullet points, numbering, or labels.
-10. Always return category and priority even when the ticket is vague.
-11. Confidence must be a number between 0 and 1.
+9. Always return category and priority.
+10. Confidence must be between 0 and 1.
