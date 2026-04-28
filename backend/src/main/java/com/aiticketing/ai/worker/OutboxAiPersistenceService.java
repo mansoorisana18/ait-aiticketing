@@ -447,16 +447,16 @@ public class OutboxAiPersistenceService {
 
 		OffsetDateTime now = OffsetDateTime.now();
 
-		if (routingResult.selectedAgentId != null && ticket.getFirstAssignedAt() == null) {
+		if (routingResult.selectedAgentId != null) {
 			User agent = userRepo.findById(routingResult.selectedAgentId)
 					.orElseThrow(() -> new IllegalArgumentException(
 							"Selected Agent Id not found: " + routingResult.selectedAgentId));
 			ticket.setAssignedTo(agent);
-
+			
 			if (ticket.getFirstAssignedAt() == null)
 				ticket.setFirstAssignedAt(now);
 		}
-
+		
 		PERSISTENCE_LOG.info("OutboxAiPersistenceService :: in persistRoutingSuccess() :: oeId={} eventType={} ticketId={}",
 				work.outboxId, work.eventType, work.aggregateId);
 
