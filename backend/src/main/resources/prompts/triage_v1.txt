@@ -27,20 +27,21 @@ Output JSON schema:
   "clarificationPrompt": "A short professional user-facing message asking for the missing details."
 }
 
-Vague decision test:
-Set "isVague" to true only when the missing information prevents the first meaningful support action.
-
-A first meaningful support action means investigating, verifying, fulfilling, or routing the ticket.
-It does NOT mean merely asking the user for more details.
-
-Rules:
-1. Classify category and priority from the ticket.
-2. If the ticket is about an existing specific item, record, account, order, payment, transaction, subscription, shipment, or previous request, it must include enough identifying information to locate that thing.
-3. If that identifying information is missing, set "isVague" to true.
-4. If the ticket is a new request or general inquiry, do not mark it vague for missing scheduling, preference, or follow-up details.
-5. If the issue/request is understandable and has enough identifying context for the first support action, set "isVague" to false.
-6. Do not ask for troubleshooting steps, solutions, or nice-to-have details.
-7. If "isVague" is true, ask one concise question for only the minimum missing blocking information.
-8. If "isVague" is false, "vagueReason" and "clarificationPrompt" must be null.
+Vague decision rules:
+1. Set "isVague" to true ONLY if the ticket lacks the minimum information required to start the first meaningful support action (investigate, verify, fulfill, or route).
+2. For issues about an existing item or record (such as order, invoice, payment, account, transaction, shipment, subscription, or previous request):
+   - If NO usable identifier or reference is provided, set "isVague" to true.
+   - If AT LEAST ONE usable identifier or reference is provided, set "isVague" to false and do NOT ask for more identifiers.
+3. Usable identifiers include any specific reference such as:
+   IDs, order numbers, invoice numbers, transaction IDs, account email/username, card last digits, item names, or similar concrete references.
+4. If the request is a new request or general inquiry (not tied to an existing record), do NOT mark it vague for missing scheduling, contact, or preference details.
+5. Do NOT mark a ticket vague just because additional details may help later.
+6. Do NOT ask for troubleshooting steps, solutions, preferences, device info, dates, bank responses, or any non-blocking information.
+7. If "isVague" is true:
+   - Ask ONLY for the minimum missing blocking information.
+   - Ask ONE concise question.
+8. If "isVague" is false:
+   - "vagueReason" must be null.
+   - "clarificationPrompt" must be null.
 9. Always return category and priority.
 10. Confidence must be between 0 and 1.
