@@ -69,12 +69,11 @@ public class MetricsServiceImpl implements MetricsService {
                   COALESCE(AVG(EXTRACT(EPOCH FROM (ticket_ai_triaged_at - ticket_current_triage_started_at))), 0) AS avg_triage_time_seconds,
                   COALESCE(AVG(ticket_ai_confidence), 0) AS avg_ai_confidence,
                   COUNT(*) FILTER (
-                    WHERE ticket_status = 'VAGUE'
-                      AND ticket_ai_triaged_at IS NOT NULL
+                    WHERE ticket_last_vague_at IS NOT NULL
                   ) AS vague_count
                 FROM tickets
                 """);
-
+        
         long totalTicketsCreated = getLong(row, "total_tickets_created");
         long triageCompletedCount = getLong(row, "triage_completed_count");
         double avgTriageTimeSeconds = getDouble(row, "avg_triage_time_seconds");

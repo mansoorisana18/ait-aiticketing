@@ -641,10 +641,14 @@ public class TicketServiceImpl implements TicketService {
 	        throw new BadRequestException("Invalid STATUS override transition from " + currentStatus + " to " + newStatus);
 	    }
 
-	    ticket.setStatus(newStatus);
+	    ticket.setStatus(newStatus);	    
 
 	    //Admin is overriding AI VAGUE decision, so we resume the next pipeline stage by adding DUPLICATE_CHECK_REQUESTED row in outbox table
 	    if (currentStatus == TicketStatus.VAGUE && newStatus == TicketStatus.READY) {
+	    	//We don't surface the clarification prompt as ticket's VAGUE status is overriden
+	    	ticket.setVagueReason(null);
+		    ticket.setClarificationPrompt(null);
+		    
 	        OutboxEvent duplicateEvent = new OutboxEvent();
 	        duplicateEvent.setEventType(OutboxEventType.DUPLICATE_CHECK_REQUESTED.name());
 	        duplicateEvent.setAggregateType(AggregateType.TICKET.name());
