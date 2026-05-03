@@ -398,7 +398,7 @@ export default function AnalyticsPage() {
               summary: "Percentage of tickets that required clarification after triage.",
               interpretation:
                 "Higher values suggest the system is frequently detecting missing or unclear ticket details.",
-              calculation: "Tickets marked as vague divided by triaged tickets.",
+              calculation: "Tickets that were marked as vague divided by triaged tickets.",
             }}
             progressValue={triage.aiTriageAccuracy ?? null}
             progressLabel="Human acceptance of AI triage decisions"
