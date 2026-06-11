@@ -91,24 +91,37 @@ public class OutboxAiPersistenceService {
 	//ClaimedOutboxWork dto
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public ClaimedOutboxWork claimEvent(Long oeId) {
-		OutboxEvent outbox = outboxRepo.findById(oeId)
-				.orElseThrow(() -> new IllegalStateException("OutboxEvent not found: " + oeId));
-
-		if (!"PENDING".equalsIgnoreCase(outbox.getStatus())) {
-			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in claimEvent() skipping oeId={} because status={}",
-					oeId, outbox.getStatus());
+		
+		OffsetDateTime now = OffsetDateTime.now();
+		
+		//1.1) Claim ownership of the outbox row.
+		//Only one worker/pod can successfully mark outbox row from PENDING to PROCESSING
+		//update query will return 1 is claim is successfully, otherwise 0 if status changed before claim
+		int updated = outboxRepo.claimEventIfPending(oeId, now);
+		
+//		if (!"PENDING".equalsIgnoreCase(outbox.getStatus())) {
+//			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in claimEvent() skipping oeId={} because status={}",
+//					oeId, outbox.getStatus());
+//			return null;
+//		}
+		
+		//means another worker already claimed the event, so skip this oeId
+		if (updated == 0) {
+			PERSISTENCE_LOG.debug("OutboxAiPersistenceService :: in claimEvent() skipping oeId={} because status is not PENDING");
 			return null;
 		}
+		
+		//Re-read the claimed row to build the work DTO.
+		OutboxEvent outbox = outboxRepo.findById(oeId)
+				.orElseThrow(() -> new IllegalStateException("OutboxEvent not found: " + oeId));
 
 		Ticket ticket = ticketRepo.findById(outbox.getAggregateId())
 				.orElseThrow(() -> new IllegalStateException("Ticket not found: " + outbox.getAggregateId()));
 
-		OffsetDateTime now = OffsetDateTime.now();
-
-		//1.1) mark outbox row as PROCESSING
-		outbox.setStatus("PROCESSING");
-		outbox.setLastError(null);
-		outboxRepo.save(outbox);
+		
+//		outbox.setStatus("PROCESSING");l
+//		outbox.setLastError(null);
+//		outboxRepo.save(outbox);
 
 		//1.2) mark the ticket row as AI_PROCESSING
 		if (OutboxEventType.TRIAGE_REQUESTED.name().equals(outbox.getEventType())) {
