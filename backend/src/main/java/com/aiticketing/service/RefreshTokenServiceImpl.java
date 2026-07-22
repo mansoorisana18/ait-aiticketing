@@ -41,9 +41,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     @Transactional
     public String issueRefreshToken(User user) {
-    	REFRESH_TOKEN_SERVICE_LOG.info("RefreshTokenServiceImpl :: in issueRefreshToken()");
+        REFRESH_TOKEN_SERVICE_LOG.info("RefreshTokenServiceImpl :: in issueRefreshToken()");
         String raw = generateSecureToken();
-        REFRESH_TOKEN_SERVICE_LOG.info("RefreshTokenServiceImpl :: in issueRefreshToken() :: raw={}", raw);
         String hash = sha256(raw);
 
         OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(refreshExpMinutes);

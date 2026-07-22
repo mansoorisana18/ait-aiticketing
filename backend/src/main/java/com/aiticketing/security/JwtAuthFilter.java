@@ -49,13 +49,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
-        JWT_FILTER_LOG.info("JwtAuthFilter :: in doFilterInternal() :: header={}",header);
         //if no JWT is provided then continue as spring security will decide if endpoint requires auth
         if (header == null || !header.startsWith("Bearer ")) {
         	JWT_FILTER_LOG.info("JwtAuthFilter :: in doFilterInternal() :: header not provided or doesnt have Bearer");
         	chain.doFilter(request, response);
             return;
         }
+        JWT_FILTER_LOG.info("JwtAuthFilter :: in doFilterInternal() :: Bearer token present");
         
         String token = header.substring(7).trim();
 
