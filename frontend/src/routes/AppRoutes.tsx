@@ -55,8 +55,12 @@ export default function AppRoutes() {
         <Route path="/tickets/new" element={<NewTicketPage />} />
         <Route path="/tickets/:ticketId" element={<TicketDetailsPage />} />
 
-        <Route path="/kb" element={<KbListPage />} />
         <Route path="/kb/:kbId" element={<KbDetailsPage />} />
+
+        {/* AGENT / ADMIN shared KB browser */}
+        <Route element={<RoleRoute allowedRoles={["AGENT", "ADMIN"]} />}>
+          <Route path="/kb" element={<KbListPage />} />
+        </Route>
 
         {/* AGENT-only */}
         <Route element={<RoleRoute allowedRoles={["AGENT"]} />}>
